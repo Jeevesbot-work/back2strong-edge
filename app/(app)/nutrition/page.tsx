@@ -7,6 +7,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import PushOptIn from "@/components/PushOptIn";
+import ManualMealEntry from "@/components/ManualMealEntry";
 import {
   type LiveRecipe,
   type RecipeCategory,
@@ -290,6 +291,8 @@ export default function NutritionPage() {
             </div>
           </button>
           <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
+
+          <ManualMealEntry onLogged={(log) => { setLatest(log); setLogs((prev) => [log, ...prev]); }} />
 
           <button onClick={() => { setError(""); setScannerOpen(true); }} disabled={analysing || scanLoading} className="anim-1 pressable w-full bg-edge-surface border border-white/[0.08] rounded-[20px] p-4 flex items-center gap-4 mb-6 transition-transform disabled:opacity-60">
             <div className="w-11 h-11 rounded-xl bg-edge-bronze/10 border border-edge-bronze/20 flex items-center justify-center flex-shrink-0">
