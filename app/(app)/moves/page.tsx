@@ -23,8 +23,15 @@ export default function MovesPage() {
         {MOVEMENTS.map((m) => (
           <Link key={m.slug} href={`/moves/${m.slug}`} style={{ textDecoration: "none" }}>
             <div style={{ background: SURFACE, borderRadius: 20, border: `1px solid ${BORDER}`, overflow: "hidden" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={m.images[1]?.src ?? m.images[0].src} alt={m.name} style={{ width: "100%", height: 180, objectFit: "cover", objectPosition: "center 30%", display: "block" }} />
+              {m.images.length > 0 ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={m.images[1]?.src ?? m.images[0].src} alt={m.name} style={{ width: "100%", height: 180, objectFit: "cover", objectPosition: "center 30%", display: "block" }} />
+              ) : (
+                <div style={{ width: "100%", height: 96, background: "linear-gradient(135deg,#1b1f26,#12151a)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <span style={{ fontSize: 22 }}>🎬</span>
+                  <span style={{ fontFamily: inter, fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: "0.12em" }}>Demo coming soon</span>
+                </div>
+              )}
               <div style={{ padding: 16 }}>
                 <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
                   {m.trains.map((t) => (
