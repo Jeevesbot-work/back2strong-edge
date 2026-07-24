@@ -33,17 +33,24 @@ export default function MovementPage({ params }: { params: { slug: string } }) {
       <p style={{ fontFamily: inter, fontSize: 13, color: MUTED, marginTop: 4, marginBottom: 20 }}>{m.subtitle} · {m.equipment}</p>
 
       {/* Frame strip — the visual demo */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 24 }}>
-        {m.images.map((img) => (
-          <div key={img.src} style={{ flex: 1 }}>
-            <div style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${BORDER}`, aspectRatio: "3 / 4" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.src} alt={img.caption} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      {m.images.length > 0 ? (
+        <div style={{ display: "flex", gap: 6, marginBottom: 24 }}>
+          {m.images.map((img) => (
+            <div key={img.src} style={{ flex: 1 }}>
+              <div style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${BORDER}`, aspectRatio: "3 / 4" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.src} alt={img.caption} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              </div>
+              <p style={{ fontFamily: inter, fontSize: 9, color: MUTED, textAlign: "center", marginTop: 6, lineHeight: 1.3 }}>{img.caption}</p>
             </div>
-            <p style={{ fontFamily: inter, fontSize: 9, color: MUTED, textAlign: "center", marginTop: 6, lineHeight: 1.3 }}>{img.caption}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ marginBottom: 24, borderRadius: 16, border: `1px dashed ${BORDER}`, background: SURFACE, padding: "28px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 26 }}>🎬</span>
+          <p style={{ fontFamily: inter, fontSize: 12, color: MUTED, textAlign: "center", lineHeight: 1.5 }}>Demo clip coming soon.<br />The coaching below is all you need in the meantime.</p>
+        </div>
+      )}
 
       {/* Why */}
       <div style={{ background: SURFACE, borderRadius: 20, border: `1px solid ${BORDER}`, padding: 20, marginBottom: 16 }}>

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { markSessionDone } from "@/components/SessionCards";
 import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
+import { movementForExercise } from "@/lib/data/movements";
 import type { Programme, SessionData } from "@/types";
 
 type SetLog = { reps: number; weight: string; done: boolean };
@@ -280,6 +282,14 @@ export default function SessionPage() {
                     {ex.rest && <span style={{ color: S.sub }}> · {ex.rest} rest</span>}
                   </p>
                   {ex.notes && <p style={sans(11, S.sub)}>{ex.notes}</p>}
+                  {movementForExercise(ex.name) && (
+                    <Link href={`/moves/${movementForExercise(ex.name)!.slug}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 10, textDecoration: "none",
+                        background: "rgba(200,150,90,0.1)", border: "1px solid rgba(200,150,90,0.25)", borderRadius: 8, padding: "5px 10px" }}>
+                      <span style={{ fontSize: 12 }}>🎬</span>
+                      <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: S.bronze, textTransform: "uppercase", letterSpacing: "0.08em" }}>How to</span>
+                    </Link>
+                  )}
                   {ytId(ex.yt) && (
                     <a href={ex.yt} target="_blank" rel="noopener noreferrer"
                       style={{ display: "block", marginTop: 10, position: "relative", borderRadius: 10, overflow: "hidden", textDecoration: "none" }}>
@@ -372,7 +382,7 @@ export default function SessionPage() {
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
             <h2 style={{ ...serif(30), flex: 1 }}>{ex.name}</h2>
-            {ytId(ex.yt) && (
+            {ytId(ex.yt) ? (
               <a href={ex.yt} target="_blank" rel="noopener noreferrer"
                 style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, background: "rgba(200,150,90,0.1)", border: "1px solid rgba(200,150,90,0.25)", borderRadius: 8, padding: "5px 10px", textDecoration: "none", marginTop: 4 }}>
                 <svg viewBox="0 0 24 24" fill={S.bronze} style={{ width: 12, height: 12 }}>
@@ -380,6 +390,12 @@ export default function SessionPage() {
                 </svg>
                 <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10, color: S.bronze, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>Demo</span>
               </a>
+            ) : movementForExercise(ex.name) && (
+              <Link href={`/moves/${movementForExercise(ex.name)!.slug}`}
+                style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, background: "rgba(200,150,90,0.1)", border: "1px solid rgba(200,150,90,0.25)", borderRadius: 8, padding: "5px 10px", textDecoration: "none", marginTop: 4 }}>
+                <span style={{ fontSize: 12 }}>🎬</span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10, color: S.bronze, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>How to</span>
+              </Link>
             )}
           </div>
           <p style={{ ...sans(14, S.bronze) }}>
