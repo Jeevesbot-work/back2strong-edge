@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>5·6·7·8 — Milly's studio</title>
+<meta name="description" content="Milly's fun training studio: strength, stretch, swim and dance — with easy logging and a friendly coach.">
+<meta name="theme-color" content="#E63F7A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="5·6·7·8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A9%B0%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<style>
+  /* ============ 5·6·7·8 — Milly's studio ============ */
+  :root{
+    --ground:#FBF7F4; --surface:#FFFFFF; --surface-2:#F5EEF0;
+    --ink:#241C2B; --ink-soft:#5B4F60; --muted:#8A7F8E; --line:#EADFE4;
+    --rose:#E63F7A; --rose-ink:#B31E56; --rose-wash:#FCE9F0;
+    --teal:#2FB5A8; --teal-wash:#E1F4F1;
+    --amber:#F5A524; --amber-wash:#FCEFD6;
+    --violet:#8B5CF6; --violet-wash:#EEE8FD;
+    --sky:#3AA0E6;
+    --shadow:0 10px 30px -12px rgba(60,20,45,.28);
+    --shadow-sm:0 4px 14px -8px rgba(60,20,45,.32);
+    --r-lg:26px; --r-md:18px; --r-sm:12px;
+    --disp:'ui-rounded','SF Pro Rounded','Nunito',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --body:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    --num:'SF Mono',ui-monospace,'Roboto Mono',monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#161018; --surface:#211926; --surface-2:#2B2131;
+      --ink:#F6EEF3; --ink-soft:#CDBFCC; --muted:#9C8DA0; --line:#352A3D;
+      --rose:#FF6BA0; --rose-ink:#FF87B3; --rose-wash:#3A1A2A;
+      --teal:#3ED0C1; --teal-wash:#123330;
+      --amber:#FBBE4E; --amber-wash:#3A2C12;
+      --violet:#A987FB; --violet-wash:#251A3D;
+      --sky:#5CB4F2;
+      --shadow:0 14px 34px -14px rgba(0,0,0,.6);
+      --shadow-sm:0 6px 16px -10px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#161018; --surface:#211926; --surface-2:#2B2131;
+    --ink:#F6EEF3; --ink-soft:#CDBFCC; --muted:#9C8DA0; --line:#352A3D;
+    --rose:#FF6BA0; --rose-ink:#FF87B3; --rose-wash:#3A1A2A;
+    --teal:#3ED0C1; --teal-wash:#123330;
+    --amber:#FBBE4E; --amber-wash:#3A2C12;
+    --violet:#A987FB; --violet-wash:#251A3D;
+    --sky:#5CB4F2;
+    --shadow:0 14px 34px -14px rgba(0,0,0,.6);
+    --shadow-sm:0 6px 16px -10px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--ground); color:var(--ink);
+    font-family:var(--body); line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    /* studio backdrop */
+    background-image:
+      radial-gradient(1200px 500px at 15% -10%, var(--rose-wash), transparent 60%),
+      radial-gradient(900px 400px at 100% 0%, var(--teal-wash), transparent 55%);
+  }
+  .wrap{max-width:468px;margin:0 auto;min-height:100vh;min-height:100svh;
+    position:relative;padding-bottom:104px}
+  @media(min-width:520px){
+    .wrap{margin:18px auto;min-height:auto;border-radius:34px;overflow:hidden;
+      box-shadow:var(--shadow);background:var(--ground);
+      outline:1px solid var(--line)}
+  }
+  .screen{display:none;padding:20px 18px 8px;animation:rise .34s cubic-bezier(.2,.7,.3,1)}
+  .screen.on{display:block}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){
+    .screen,.pop,.burst i{animation:none!important}
+    *{transition:none!important}
+  }
+
+  /* ---- header / eyebrow ---- */
+  .eyebrow{font-family:var(--disp);font-weight:800;letter-spacing:.16em;
+    text-transform:uppercase;font-size:11px;color:var(--rose-ink)}
+  h1.big{font-family:var(--disp);font-weight:800;letter-spacing:-.02em;
+    font-size:30px;line-height:1.04;margin:2px 0 2px;text-wrap:balance}
+  .sub{color:var(--muted);font-size:13.5px}
+  .count{font-family:var(--disp);font-weight:800;color:var(--rose);
+    letter-spacing:.02em}
+
+  /* ---- cards ---- */
+  .card{background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--r-lg);padding:18px;box-shadow:var(--shadow-sm);margin-top:14px}
+  .card.tight{padding:14px}
+  .card h2{font-family:var(--disp);font-weight:800;font-size:19px;margin:0 0 2px;
+    letter-spacing:-.01em}
+  .card .lead{color:var(--ink-soft);font-size:14px}
+
+  .row{display:flex;align-items:center;gap:12px}
+  .between{justify-content:space-between}
+  .grow{flex:1;min-width:0}
+
+  /* ---- quick log grid ---- */
+  .qgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:6px}
+  .q{border:none;cursor:pointer;background:var(--surface-2);
+    border-radius:var(--r-md);padding:12px 6px 10px;display:flex;flex-direction:column;
+    align-items:center;gap:6px;color:var(--ink);transition:transform .12s ease, box-shadow .2s;
+    box-shadow:0 1px 0 rgba(0,0,0,.02)}
+  .q:active{transform:scale(.93)}
+  .q .em{font-size:23px;line-height:1}
+  .q .lab{font-size:11px;font-weight:700;font-family:var(--disp);letter-spacing:.01em}
+  .q.rose{background:var(--rose-wash)} .q.teal{background:var(--teal-wash)}
+  .q.amber{background:var(--amber-wash)} .q.violet{background:var(--violet-wash)}
+
+  /* ---- pills / chips ---- */
+  .pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;
+    padding:5px 11px;font-size:12px;font-weight:700;font-family:var(--disp)}
+  .pill.rose{background:var(--rose-wash);color:var(--rose-ink)}
+  .pill.teal{background:var(--teal-wash);color:var(--teal)}
+  .pill.amber{background:var(--amber-wash);color:#9a6300}
+  .pill.violet{background:var(--violet-wash);color:var(--violet)}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pill.amber{color:var(--amber)}}
+  :root[data-theme="dark"] .pill.amber{color:var(--amber)}
+
+  /* ---- water ---- */
+  .drops{display:flex;gap:7px;margin-top:12px;flex-wrap:wrap}
+  .drop{width:30px;height:38px;border-radius:50% 50% 50% 50%/60% 60% 40% 40%;
+    background:var(--surface-2);border:1.5px solid var(--line);cursor:pointer;
+    transition:transform .12s, background .2s;position:relative}
+  .drop:active{transform:scale(.9)}
+  .drop.full{background:linear-gradient(180deg,var(--teal),#1f8f85);border-color:transparent}
+  .drop.full::after{content:"";position:absolute;top:7px;left:8px;width:7px;height:9px;
+    border-radius:50%;background:rgba(255,255,255,.55)}
+
+  /* ---- discipline list ---- */
+  .disc{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;margin-top:12px;
+    background:var(--surface)}
+  .disc>summary{list-style:none;cursor:pointer;padding:15px 16px;display:flex;
+    align-items:center;gap:13px}
+  .disc>summary::-webkit-details-marker{display:none}
+  .disc .icn{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;
+    font-size:22px;flex:none}
+  .d-strength .icn{background:var(--amber-wash)} .d-mobility .icn{background:var(--violet-wash)}
+  .d-swim .icn{background:var(--teal-wash)} .d-dance .icn{background:var(--rose-wash)}
+  .disc .t{font-family:var(--disp);font-weight:800;font-size:16px}
+  .disc .m{color:var(--muted);font-size:12.5px}
+  .disc .chev{margin-left:auto;color:var(--muted);transition:transform .25s;flex:none}
+  .disc[open] .chev{transform:rotate(90deg)}
+  .disc .body{padding:2px 16px 16px}
+  .move{display:flex;gap:10px;padding:9px 0;border-top:1px dashed var(--line);align-items:baseline}
+  .move .n{font-weight:600;font-size:14px}
+  .move .r{margin-left:auto;color:var(--rose-ink);font-family:var(--num);font-size:12.5px;
+    font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .tip{font-size:12.5px;color:var(--ink-soft);background:var(--surface-2);
+    border-radius:12px;padding:9px 12px;margin-top:12px}
+
+  /* ---- buttons ---- */
+  .btn{border:none;cursor:pointer;font-family:var(--disp);font-weight:800;font-size:14px;
+    border-radius:14px;padding:12px 16px;background:var(--rose);color:#fff;width:100%;
+    transition:transform .12s, filter .2s;box-shadow:0 8px 20px -10px var(--rose)}
+  .btn:active{transform:scale(.97)} .btn:hover{filter:brightness(1.05)}
+  .btn.ghost{background:var(--surface-2);color:var(--ink);box-shadow:none}
+  .btn.done{background:var(--teal);box-shadow:0 8px 20px -10px var(--teal)}
+  .btn.sm{width:auto;padding:9px 14px;font-size:13px}
+
+  /* ---- fuel ---- */
+  .meal{display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+  .meal:first-of-type{border-top:none}
+  .meal .em{font-size:22px}
+  .meal .h{font-family:var(--disp);font-weight:800;font-size:14.5px}
+  .meal .d{color:var(--ink-soft);font-size:13px}
+  .care{background:var(--rose-wash);border-radius:var(--r-md);padding:13px 15px;
+    font-size:13px;color:var(--rose-ink);margin-top:14px;line-height:1.55}
+
+  /* ---- coach ---- */
+  .chat{display:flex;flex-direction:column;gap:10px;padding:4px 0 8px;min-height:40px}
+  .msg{max-width:82%;padding:11px 14px;border-radius:18px;font-size:14px;line-height:1.5;
+    animation:pop .28s cubic-bezier(.2,.8,.3,1)}
+  @keyframes pop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+  .msg.coach{background:var(--surface);border:1px solid var(--line);align-self:flex-start;
+    border-bottom-left-radius:6px}
+  .msg.me{background:var(--rose);color:#fff;align-self:flex-end;border-bottom-right-radius:6px}
+  .msg .who{font-family:var(--disp);font-weight:800;font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--rose-ink);margin-bottom:3px}
+  .chips{display:flex;gap:8px;overflow-x:auto;padding:4px 0 2px;-webkit-overflow-scrolling:touch}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{white-space:nowrap;border:1px solid var(--line);background:var(--surface);
+    border-radius:999px;padding:8px 13px;font-size:12.5px;font-weight:700;font-family:var(--disp);
+    color:var(--ink-soft);cursor:pointer;flex:none}
+  .chip:active{transform:scale(.95)}
+  .composer{display:flex;gap:8px;margin-top:8px}
+  .composer input{flex:1;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+    border-radius:14px;padding:12px 14px;font-size:14px;font-family:var(--body)}
+  .composer input:focus{outline:2px solid var(--rose);outline-offset:1px}
+  .send{flex:none;width:46px;border:none;border-radius:14px;background:var(--rose);color:#fff;
+    font-size:18px;cursor:pointer}
+  .send:active{transform:scale(.94)}
+
+  /* ---- progress ---- */
+  .stat{display:flex;flex-direction:column;gap:2px}
+  .stat .v{font-family:var(--disp);font-weight:800;font-size:26px;letter-spacing:-.01em;
+    font-variant-numeric:tabular-nums}
+  .stat .k{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
+    letter-spacing:.08em}
+  .stats3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .stats3 .card{margin-top:0;padding:14px 12px}
+  .bars{display:flex;align-items:flex-end;gap:10px;height:120px;margin-top:10px;padding-top:8px}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;height:100%;
+    justify-content:flex-end}
+  .bar .col{width:100%;border-radius:10px 10px 4px 4px;min-height:4px;
+    transition:height .5s cubic-bezier(.2,.7,.3,1)}
+  .bar .cap{font-size:11px;color:var(--muted);font-weight:700;font-family:var(--disp)}
+  .bar .val{font-size:11px;font-family:var(--num);color:var(--ink-soft);font-weight:600}
+  .badge{display:flex;gap:11px;align-items:center;padding:11px 0;border-top:1px solid var(--line)}
+  .badge:first-of-type{border-top:none}
+  .badge .b{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:20px;
+    background:var(--surface-2);flex:none;filter:grayscale(1);opacity:.4}
+  .badge.got .b{filter:none;opacity:1;background:var(--amber-wash)}
+  .badge .bt{font-family:var(--disp);font-weight:800;font-size:14px}
+  .badge .bd{font-size:12.5px;color:var(--muted)}
+  .badge.got .bd{color:var(--ink-soft)}
+
+  .empty{color:var(--muted);font-size:13.5px;text-align:center;padding:18px 8px}
+
+  /* ---- feed ---- */
+  .feed{display:flex;flex-direction:column;gap:0}
+  .fi{display:flex;gap:11px;padding:10px 0;border-top:1px solid var(--line);align-items:center}
+  .fi:first-child{border-top:none}
+  .fi .fe{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:17px;
+    background:var(--surface-2);flex:none}
+  .fi .fl{font-weight:600;font-size:13.5px}
+  .fi .ft{margin-left:auto;color:var(--muted);font-size:11.5px;font-family:var(--num)}
+  .fi .x{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px}
+
+  /* ---- bottom nav ---- */
+  nav{position:fixed;left:0;right:0;bottom:0;z-index:20}
+  .navin{max-width:468px;margin:0 auto;background:color-mix(in srgb,var(--surface) 88%,transparent);
+    -webkit-backdrop-filter:saturate(1.4) blur(14px);backdrop-filter:saturate(1.4) blur(14px);
+    border-top:1px solid var(--line);display:flex;padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
+  @media(min-width:520px){.navin{border-radius:0 0 34px 34px;border-left:1px solid var(--line);
+    border-right:1px solid var(--line)}}
+  .tab{flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;
+    align-items:center;gap:3px;padding:5px 2px;color:var(--muted);transition:color .2s}
+  .tab .ti{font-size:20px;transition:transform .2s}
+  .tab .tl{font-size:10px;font-weight:800;font-family:var(--disp);letter-spacing:.02em}
+  .tab.on{color:var(--rose)} .tab.on .ti{transform:translateY(-2px) scale(1.08)}
+
+  /* ---- toast + confetti ---- */
+  .toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:var(--ground);padding:11px 18px;border-radius:999px;
+    font-family:var(--disp);font-weight:800;font-size:13.5px;z-index:40;opacity:0;
+    transition:opacity .3s, transform .3s;box-shadow:var(--shadow);pointer-events:none;white-space:nowrap}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .burst{position:fixed;inset:0;pointer-events:none;z-index:39;overflow:hidden}
+  .burst i{position:absolute;top:44%;width:9px;height:14px;border-radius:2px;
+    animation:fly .9s ease-out forwards}
+  @keyframes fly{to{transform:translate(var(--tx),var(--ty)) rotate(var(--rot));opacity:0}}
+
+  .theme-btn{border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);
+    width:38px;height:38px;border-radius:12px;cursor:pointer;font-size:16px;flex:none}
+  a.link{color:var(--rose-ink);font-weight:700;text-decoration:none}
+  .foot{text-align:center;color:var(--muted);font-size:11.5px;padding:16px 0 6px}
+</style>
+
+<div class="wrap">
+
+  <!-- ============ TODAY ============ -->
+  <section class="screen on" id="tab-today">
+    <div class="row between">
+      <div>
+        <div class="eyebrow">5 · 6 · 7 · 8</div>
+        <h1 class="big" id="greet">Hey Milly 👋</h1>
+        <div class="sub" id="today-date">—</div>
+      </div>
+      <button class="theme-btn" id="themeToggle" title="Switch light / dark" aria-label="Switch theme">◐</button>
+    </div>
+
+    <div class="card" style="background:linear-gradient(135deg,var(--rose),#ff8fb4);border:none;color:#fff">
+      <div class="eyebrow" style="color:rgba(255,255,255,.85)">Today's focus</div>
+      <h2 style="color:#fff" id="focus-title">Warm up & move</h2>
+      <div class="lead" style="color:rgba(255,255,255,.92)" id="focus-line">Let's find out what today is about…</div>
+      <div class="row" style="margin-top:12px;gap:8px">
+        <span class="pill" style="background:rgba(255,255,255,.22);color:#fff" id="focus-tag">Dance</span>
+        <span class="pill" style="background:rgba(255,255,255,.22);color:#fff">🔥 <span class="count" id="streak-mini" style="color:#fff">0</span>-day streak</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row between">
+        <h2>Quick log</h2>
+        <span class="sub" id="today-count">Nothing yet today</span>
+      </div>
+      <div class="lead">One tap. That's it. ✨</div>
+      <div class="qgrid">
+        <button class="q amber"  data-log="strength" data-em="💪" data-label="Strength"><span class="em">💪</span><span class="lab">Strength</span></button>
+        <button class="q violet" data-log="mobility" data-em="🧘" data-label="Mobility"><span class="em">🧘</span><span class="lab">Stretch</span></button>
+        <button class="q teal"   data-log="swim"     data-em="🏊" data-label="Swim"><span class="em">🏊</span><span class="lab">Swim</span></button>
+        <button class="q rose"   data-log="dance"    data-em="🩰" data-label="Dance"><span class="em">🩰</span><span class="lab">Dance</span></button>
+      </div>
+      <div class="qgrid" style="grid-template-columns:repeat(3,1fr);margin-top:10px">
+        <button class="q" data-log="meal" data-em="🍓" data-label="Snack / meal"><span class="em">🍓</span><span class="lab">Fuel</span></button>
+        <button class="q" data-mood="1" data-em="🌟" data-label="Mood"><span class="em">🌟</span><span class="lab">Feeling</span></button>
+        <button class="q" data-log="rest" data-em="😴" data-label="Rest day"><span class="em">😴</span><span class="lab">Rest</span></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row between">
+        <h2>Water</h2>
+        <span class="sub"><span class="count" id="water-n">0</span> / 6 glasses</span>
+      </div>
+      <div class="lead">Dancers run on water. Tap a drop each glass. 💧</div>
+      <div class="drops" id="drops"></div>
+    </div>
+
+    <div class="card">
+      <div class="row between">
+        <h2>Today so far</h2>
+      </div>
+      <div class="feed" id="today-feed"></div>
+    </div>
+    <div class="foot">Made for Milly · everything saves on your phone</div>
+  </section>
+
+  <!-- ============ TRAIN ============ -->
+  <section class="screen" id="tab-train">
+    <div class="eyebrow">Train</div>
+    <h1 class="big">Your studio</h1>
+    <div class="sub">Four ways to get stronger. Pick one, follow along, tap done.</div>
+
+    <details class="disc d-strength">
+      <summary><span class="icn">💪</span><span class="grow"><div class="t">Strength &amp; conditioning</div><div class="m">15 min · builds power for jumps</div></span><span class="chev">›</span></summary>
+      <div class="body">
+        <div class="move"><span class="n">Glute bridges</span><span class="r">3 × 12</span></div>
+        <div class="move"><span class="n">Single-leg calf raises</span><span class="r">3 × 15 each</span></div>
+        <div class="move"><span class="n">Wall sit</span><span class="r">3 × 30s</span></div>
+        <div class="move"><span class="n">Plank</span><span class="r">3 × 25s</span></div>
+        <div class="move"><span class="n">Side plank</span><span class="r">2 × 20s each</span></div>
+        <div class="move"><span class="n">Superman holds</span><span class="r">3 × 10</span></div>
+        <div class="tip">💡 Strong dancers jump higher and land softer. Quality over speed — squeeze at the top of every rep.</div>
+        <button class="btn done" data-log="strength" data-em="💪" data-label="Strength session" style="margin-top:14px">Done — log it ✓</button>
+      </div>
+    </details>
+
+    <details class="disc d-mobility">
+      <summary><span class="icn">🧘</span><span class="grow"><div class="t">Mobility &amp; stretch</div><div class="m">12 min · splits &amp; happy hips</div></span><span class="chev">›</span></summary>
+      <div class="body">
+        <div class="move"><span class="n">Cat–cow flow</span><span class="r">8 slow</span></div>
+        <div class="move"><span class="n">World's greatest stretch</span><span class="r">5 each side</span></div>
+        <div class="move"><span class="n">Butterfly + fold</span><span class="r">60s</span></div>
+        <div class="move"><span class="n">Half splits (each leg)</span><span class="r">45s</span></div>
+        <div class="move"><span class="n">Seated forward fold</span><span class="r">60s</span></div>
+        <div class="move"><span class="n">Ankle circles &amp; point/flex</span><span class="r">10 each</span></div>
+        <div class="tip">💡 Never bounce into a stretch. Breathe out, sink a little deeper, hold. Warm muscles stretch best — do this after moving.</div>
+        <button class="btn done" data-log="mobility" data-em="🧘" data-label="Mobility &amp; stretch" style="margin-top:14px">Done — log it ✓</button>
+      </div>
+    </details>
+
+    <details class="disc d-swim">
+      <summary><span class="icn">🏊</span><span class="grow"><div class="t">Swim session</div><div class="m">25–30 min · easy on the body</div></span><span class="chev">›</span></summary>
+      <div class="body">
+        <div class="move"><span class="n">Easy warm-up swim</span><span class="r">4 min</span></div>
+        <div class="move"><span class="n">Front crawl — steady</span><span class="r">6 × 25m</span></div>
+        <div class="move"><span class="n">Kick with a float</span><span class="r">4 × 25m</span></div>
+        <div class="move"><span class="n">Backstroke — relax</span><span class="r">4 × 25m</span></div>
+        <div class="move"><span class="n">Play / float / cool down</span><span class="r">5 min</span></div>
+        <div class="tip">💡 Swimming builds stamina and lets tired dance legs recover. No pressure on times — smooth and steady wins.</div>
+        <button class="btn done" data-log="swim" data-em="🏊" data-label="Swim session" style="margin-top:14px">Done — log it ✓</button>
+      </div>
+    </details>
+
+    <details class="disc d-dance">
+      <summary><span class="icn">🩰</span><span class="grow"><div class="t">Dance conditioning</div><div class="m">15 min · turns, balance, jumps</div></span><span class="chev">›</span></summary>
+      <div class="body">
+        <div class="move"><span class="n">Relevé holds (parallel)</span><span class="r">3 × 20s</span></div>
+        <div class="move"><span class="n">Passé balance each side</span><span class="r">3 × 15s</span></div>
+        <div class="move"><span class="n">Turnout clams (band)</span><span class="r">3 × 15</span></div>
+        <div class="move"><span class="n">Tendu to the corners</span><span class="r">8 each way</span></div>
+        <div class="move"><span class="n">Small jumps (soft landings)</span><span class="r">3 × 12</span></div>
+        <div class="move"><span class="n">Spotting drill for turns</span><span class="r">2 min</span></div>
+        <div class="tip">💡 Balance is a skill you practise, not magic. Fix your eyes on one spot and pull up tall through the crown of your head.</div>
+        <button class="btn done" data-log="dance" data-em="🩰" data-label="Dance conditioning" style="margin-top:14px">Done — log it ✓</button>
+      </div>
+    </details>
+    <div class="foot">Tip: ease in, warm up first, and stop if anything hurts.</div>
+  </section>
+
+  <!-- ============ FUEL ============ -->
+  <section class="screen" id="tab-fuel">
+    <div class="eyebrow">Fuel</div>
+    <h1 class="big">Food is energy</h1>
+    <div class="sub">Simple ideas to power your dancing — and keep it fun.</div>
+
+    <div class="care">💛 This bit is all about <b>fuelling</b> your dancing — energy, strong bones and happy recovery. It's never about eating less. If anything ever feels tricky with food or how you feel, chat to your mum, dad or coach.</div>
+
+    <div class="card">
+      <h2>Before you dance</h2>
+      <div class="meal"><span class="em">🍌</span><div><div class="h">Banana + peanut butter</div><div class="d">Quick energy that lasts. 30–60 min before class.</div></div></div>
+      <div class="meal"><span class="em">🥯</span><div><div class="h">Toast or a bagel + honey</div><div class="d">Easy fuel that won't sit heavy.</div></div></div>
+      <div class="meal"><span class="em">🍎</span><div><div class="h">Apple + a handful of nuts</div><div class="d">Grab-and-go for the studio bag.</div></div></div>
+    </div>
+
+    <div class="card">
+      <h2>After you dance</h2>
+      <div class="meal"><span class="em">🥛</span><div><div class="h">Milk or a yoghurt smoothie</div><div class="d">Protein + calcium to rebuild and grow strong bones.</div></div></div>
+      <div class="meal"><span class="em">🍗</span><div><div class="h">Chicken or beans + rice</div><div class="d">A proper refuel after a big session.</div></div></div>
+      <div class="meal"><span class="em">🧀</span><div><div class="h">Cheese &amp; crackers</div><div class="d">Fast, tasty recovery when dinner's a while off.</div></div></div>
+    </div>
+
+    <div class="card">
+      <h2>Studio-bag snacks</h2>
+      <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">
+        <span class="pill amber">🥨 Pretzels</span><span class="pill teal">🫐 Berries</span>
+        <span class="pill rose">🍓 Fruit pot</span><span class="pill violet">🥜 Trail mix</span>
+        <span class="pill amber">🧃 Water + squash</span><span class="pill teal">🥕 Carrot sticks</span>
+        <span class="pill rose">🍪 Oat cookie</span>
+      </div>
+      <button class="btn ghost" data-log="meal" data-em="🍓" data-label="Snack / meal" style="margin-top:16px">Log a snack or meal 🍓</button>
+    </div>
+    <div class="foot">Growing dancers need lots of fuel. Eat the rainbow, drink your water. 🌈</div>
+  </section>
+
+  <!-- ============ COACH ============ -->
+  <section class="screen" id="tab-coach">
+    <div class="eyebrow">Coach</div>
+    <h1 class="big">Chat with Coco</h1>
+    <div class="sub">Your studio buddy — here for a pep talk, a tip, or a plan.</div>
+
+    <div class="card">
+      <div class="chat" id="chat"></div>
+      <div class="chips" id="chips">
+        <button class="chip" data-say="I'm tired today 😴">I'm tired today</button>
+        <button class="chip" data-say="How do I get my splits?">Get my splits</button>
+        <button class="chip" data-say="I'm nervous about my show">Show nerves</button>
+        <button class="chip" data-say="What should I do today?">What today?</button>
+        <button class="chip" data-say="I feel unmotivated">Unmotivated</button>
+        <button class="chip" data-say="My muscles are sore">Sore muscles</button>
+      </div>
+      <div class="composer">
+        <input id="chat-input" type="text" placeholder="Ask Coco anything…" autocomplete="off" aria-label="Message Coco">
+        <button class="send" id="chat-send" aria-label="Send">➤</button>
+      </div>
+    </div>
+    <div class="foot">Coco is a friendly built-in helper, not a real person — for anything important, ask your coach or a grown-up. 💛</div>
+  </section>
+
+  <!-- ============ YOU ============ -->
+  <section class="screen" id="tab-you">
+    <div class="eyebrow">You</div>
+    <h1 class="big">Milly's wins</h1>
+    <div class="sub">Look how much you're moving. Keep it going! 🎉</div>
+
+    <div class="stats3" style="margin-top:14px">
+      <div class="card"><div class="stat"><span class="v count" id="s-streak">0</span><span class="k">🔥 Streak</span></div></div>
+      <div class="card"><div class="stat"><span class="v" id="s-week">0</span><span class="k">This week</span></div></div>
+      <div class="card"><div class="stat"><span class="v" id="s-total">0</span><span class="k">All time</span></div></div>
+    </div>
+
+    <div class="card">
+      <h2>This week's moves</h2>
+      <div class="lead">Sessions logged by type.</div>
+      <div class="bars" id="bars"></div>
+    </div>
+
+    <div class="card">
+      <h2>Badges</h2>
+      <div id="badges"></div>
+    </div>
+
+    <div class="card">
+      <div class="row between">
+        <h2>Recent</h2>
+        <button class="btn ghost sm" id="exportBtn">Export</button>
+      </div>
+      <div class="feed" id="all-feed"></div>
+    </div>
+    <div class="foot"><a href="#" class="link" id="resetBtn">Reset all my data</a></div>
+  </section>
+
+  <!-- nav -->
+  <nav><div class="navin">
+    <button class="tab on" data-go="today"><span class="ti">🏠</span><span class="tl">Today</span></button>
+    <button class="tab" data-go="train"><span class="ti">🤸</span><span class="tl">Train</span></button>
+    <button class="tab" data-go="fuel"><span class="ti">🍓</span><span class="tl">Fuel</span></button>
+    <button class="tab" data-go="coach"><span class="ti">💬</span><span class="tl">Coach</span></button>
+    <button class="tab" data-go="you"><span class="ti">⭐</span><span class="tl">You</span></button>
+  </div></nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var KEY="milly_five678_v1";
+  var TYPES={
+    strength:{em:"💪",label:"Strength",color:"var(--amber)"},
+    mobility:{em:"🧘",label:"Stretch",color:"var(--violet)"},
+    swim:{em:"🏊",label:"Swim",color:"var(--teal)"},
+    dance:{em:"🩰",label:"Dance",color:"var(--rose)"},
+    meal:{em:"🍓",label:"Fuel",color:"var(--rose)"},
+    rest:{em:"😴",label:"Rest",color:"var(--muted)"}
+  };
+  var MOODS=["😞","😐","🙂","😃","🤩"];
+
+  function today(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+  function load(){try{return JSON.parse(localStorage.getItem(KEY))||{}}catch(e){return{}}}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+  var state=load();
+  state.logs=state.logs||[];        // {id,type,label,em,date,ts}
+  state.water=state.water||{};      // {date:count}
+  state.moods=state.moods||{};      // {date:index}
+  state.chat=state.chat||[];        // {who,text}
+  state.theme=state.theme||null;
+
+  /* ---------- theme ---------- */
+  function applyTheme(){if(state.theme){document.documentElement.setAttribute("data-theme",state.theme);}else{document.documentElement.removeAttribute("data-theme");}}
+  applyTheme();
+  document.getElementById("themeToggle").onclick=function(){
+    var dark=document.documentElement.getAttribute("data-theme")==="dark"||
+      (!document.documentElement.getAttribute("data-theme")&&window.matchMedia("(prefers-color-scheme: dark)").matches);
+    state.theme=dark?"light":"dark";applyTheme();save();
+  };
+
+  /* ---------- helpers ---------- */
+  function $(s,el){return (el||document).querySelector(s);}
+  function timeStr(ts){var d=new Date(ts);var h=d.getHours(),m=d.getMinutes();var ap=h<12?"am":"pm";h=h%12||12;return h+":"+String(m).padStart(2,"0")+ap;}
+  function toast(msg){var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove("show");},1700);}
+
+  var CONFETTI=["#E63F7A","#2FB5A8","#F5A524","#8B5CF6","#3AA0E6"];
+  function celebrate(){
+    if(window.matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+    var b=document.createElement("div");b.className="burst";
+    for(var i=0;i<22;i++){var s=document.createElement("i");
+      var ang=Math.random()*Math.PI*2,dist=90+Math.random()*160;
+      s.style.left=(46+Math.random()*8)+"%";
+      s.style.background=CONFETTI[i%CONFETTI.length];
+      s.style.setProperty("--tx",Math.cos(ang)*dist+"px");
+      s.style.setProperty("--ty",(Math.sin(ang)*dist-40)+"px");
+      s.style.setProperty("--rot",(Math.random()*720-360)+"deg");
+      s.style.animationDelay=(Math.random()*.08)+"s";
+      b.appendChild(s);}
+    document.body.appendChild(b);setTimeout(function(){b.remove();},1000);
+  }
+
+  /* ---------- logging ---------- */
+  var PRAISE=["Yes! Logged 🎉","Love that 💪","You showed up ✨","That's the streak! 🔥","Proud of you 🌟","Nice one, Milly! 🩰"];
+  function addLog(type){
+    var t=TYPES[type];if(!t)return;
+    state.logs.push({id:Date.now()+"-"+Math.random().toString(36).slice(2,6),type:type,label:t.label,em:t.em,date:today(),ts:Date.now()});
+    save();celebrate();toast(PRAISE[Math.floor(Math.random()*PRAISE.length)]);renderAll();
+  }
+  function delLog(id){state.logs=state.logs.filter(function(l){return l.id!==id;});save();renderAll();}
+
+  function setMood(){
+    var cur=state.moods[today()];var next=(cur==null?2:(cur+1)%5);
+    state.moods[today()]=next;save();toast("Feeling "+MOODS[next]);renderToday();
+  }
+  function addWater(i){
+    var d=today();var c=state.water[d]||0;
+    state.water[d]=(i+1===c)?i:i+1;  // tap same last drop to undo
+    save();renderWater();renderTodayFeedCount();
+  }
+
+  /* ---------- streak / stats ---------- */
+  function activeDays(){var s={};state.logs.forEach(function(l){if(l.type!=="meal")s[l.date]=1;});return s;}
+  function streak(){
+    var days=activeDays();var n=0;var d=new Date();
+    // if nothing today, streak can still count up to yesterday
+    for(var i=0;i<400;i++){
+      var key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+      if(days[key]){n++;}
+      else if(i===0){/* today empty, keep looking back */}
+      else{break;}
+      d.setDate(d.getDate()-1);
+    }
+    return n;
+  }
+  function weekStart(){var d=new Date();var day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);d.setHours(0,0,0,0);return d.getTime();}
+  function weekLogs(){var ws=weekStart();return state.logs.filter(function(l){return l.ts>=ws&&l.type!=="meal";});}
+
+  /* ---------- renderers ---------- */
+  var DOW=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var FOCI=[
+    {t:"Rest &amp; restore",l:"Sunday is for gentle stretching and a good sleep. Let it all soak in.",tag:"Rest",go:"mobility"},
+    {t:"Strong start",l:"Kick the week off with a strength &amp; conditioning session. Power for your jumps!",tag:"Strength",go:"strength"},
+    {t:"Dance day",l:"Turns, balance and soft landings. Practise one thing until it feels easy.",tag:"Dance",go:"dance"},
+    {t:"Splits &amp; mobility",l:"Warm up, then work your splits. Little and often beats one big push.",tag:"Stretch",go:"mobility"},
+    {t:"Pool recovery",l:"Give your legs a break with an easy swim. Smooth and steady.",tag:"Swim",go:"swim"},
+    {t:"Show up strong",l:"Friday energy! A short strength circuit, then something fun.",tag:"Strength",go:"strength"},
+    {t:"Dancer's choice",l:"Your pick today — do the thing you love most. That counts too!",tag:"Dance",go:"dance"}
+  ];
+  function renderToday(){
+    var d=new Date();
+    $("#today-date").textContent=DOW[d.getDay()]+", "+d.getDate()+" "+MON[d.getMonth()];
+    var f=FOCI[d.getDay()];
+    $("#focus-title").innerHTML=f.t;$("#focus-line").innerHTML=f.l;$("#focus-tag").textContent=f.tag;
+    $("#focus-tag").setAttribute("data-go2",f.go);
+    $("#streak-mini").textContent=streak();
+    renderWater();renderTodayFeed();renderTodayFeedCount();
+  }
+  function renderWater(){
+    var d=today();var c=state.water[d]||0;var wrap=$("#drops");wrap.innerHTML="";
+    for(var i=0;i<6;i++){(function(i){var el=document.createElement("button");
+      el.className="drop"+(i<c?" full":"");el.setAttribute("aria-label","Glass "+(i+1));
+      el.onclick=function(){addWater(i);};wrap.appendChild(el);})(i);}
+    $("#water-n").textContent=c;
+  }
+  function todaysLogs(){var t=today();return state.logs.filter(function(l){return l.date===t;});}
+  function renderTodayFeedCount(){
+    var n=todaysLogs().length;var w=state.water[today()]||0;
+    var parts=[];if(n)parts.push(n+" log"+(n>1?"s":""));if(w)parts.push(w+" 💧");
+    $("#today-count").textContent=parts.length?parts.join(" · "):"Nothing yet today";
+  }
+  function feedRow(l){
+    return '<div class="fi"><span class="fe">'+l.em+'</span><span class="fl">'+l.label+'</span>'+
+      '<span class="ft">'+timeStr(l.ts)+'</span>'+
+      '<button class="x" data-del="'+l.id+'" aria-label="Remove">✕</button></div>';
+  }
+  function renderTodayFeed(){
+    var logs=todaysLogs().slice().reverse();var el=$("#today-feed");
+    var mood=state.moods[today()];
+    var moodRow=mood!=null?'<div class="fi"><span class="fe">'+MOODS[mood]+'</span><span class="fl">Feeling '+["not great","meh","okay","good","amazing"][mood]+'</span></div>':"";
+    if(!logs.length&&!moodRow){el.innerHTML='<div class="empty">Tap a quick-log above to start your day 🌸</div>';return;}
+    el.innerHTML=moodRow+logs.map(feedRow).join("");
+  }
+  function renderYou(){
+    $("#s-streak").textContent=streak();
+    $("#s-week").textContent=weekLogs().length;
+    $("#s-total").textContent=state.logs.filter(function(l){return l.type!=="meal";}).length;
+    // bars
+    var wl=weekLogs();var counts={strength:0,mobility:0,swim:0,dance:0};
+    wl.forEach(function(l){if(counts[l.type]!=null)counts[l.type]++;});
+    var max=Math.max(1,counts.strength,counts.mobility,counts.swim,counts.dance);
+    var order=["strength","mobility","swim","dance"];
+    $("#bars").innerHTML=order.map(function(k){
+      var h=Math.round((counts[k]/max)*100);
+      return '<div class="bar"><span class="val">'+counts[k]+'</span>'+
+        '<div class="col" style="height:'+(counts[k]?h:4)+'%;background:'+TYPES[k].color+'"></div>'+
+        '<span class="cap">'+TYPES[k].em+'</span></div>';
+    }).join("");
+    // badges
+    var total=state.logs.filter(function(l){return l.type!=="meal";}).length;
+    var distinct={};state.logs.forEach(function(l){if(l.type!=="meal"&&l.type!=="rest")distinct[l.type]=1;});
+    var swims=state.logs.filter(function(l){return l.type==="swim";}).length;
+    var BADGES=[
+      {em:"🌱",t:"First move",d:"Log your very first session",got:total>=1},
+      {em:"🔥",t:"On a roll",d:"Reach a 3-day streak",got:streak()>=3},
+      {em:"⭐",t:"Perfect week",d:"5 sessions in one week",got:weekLogs().length>=5},
+      {em:"🌈",t:"All-rounder",d:"Try all 4 kinds of training",got:Object.keys(distinct).length>=4},
+      {em:"🏊",t:"Water baby",d:"Log 3 swim sessions",got:swims>=3},
+      {em:"💎",t:"Twenty club",d:"Log 20 sessions in total",got:total>=20}
+    ];
+    $("#badges").innerHTML=BADGES.map(function(b){
+      return '<div class="badge'+(b.got?" got":"")+'"><span class="b">'+b.em+'</span>'+
+        '<div><div class="bt">'+b.t+'</div><div class="bd">'+b.d+'</div></div></div>';
+    }).join("");
+    // recent feed
+    var recent=state.logs.slice(-12).reverse();
+    $("#all-feed").innerHTML=recent.length?recent.map(function(l){
+      var d=new Date(l.ts);var lab=l.label+' · '+d.getDate()+" "+MON[d.getMonth()];
+      return '<div class="fi"><span class="fe">'+l.em+'</span><span class="fl">'+lab+'</span>'+
+        '<span class="ft">'+timeStr(l.ts)+'</span>'+
+        '<button class="x" data-del="'+l.id+'" aria-label="Remove">✕</button></div>';
+    }).join(""):'<div class="empty">Your logged sessions will show up here.</div>';
+  }
+  function renderAll(){renderToday();renderYou();}
+
+  /* ---------- coach ---------- */
+  function pushMsg(who,text,skipSave){
+    state.chat.push({who:who,text:text});if(!skipSave)save();
+    var c=$("#chat");var el=document.createElement("div");el.className="msg "+who;
+    el.innerHTML=(who==="coach"?'<div class="who">Coco</div>':"")+text;
+    c.appendChild(el);c.parentNode.scrollTop=99999;
+    // scroll the screen
+    var sc=document.getElementById("tab-coach");if(sc.classList.contains("on"))window.scrollTo(0,document.body.scrollHeight);
+  }
+  function coachReply(q){
+    q=q.toLowerCase();
+    var s=streak(),wk=weekLogs().length;
+    function any(arr){for(var i=0;i<arr.length;i++)if(q.indexOf(arr[i])>=0)return true;return false;}
+    if(any(["tired","exhausted","no energy","sleepy","knackered"]))
+      return "Listen to your body 💛 A tired day is a great day for gentle stretching or an easy swim instead of going hard. Drink some water, have a snack, and get a good sleep tonight. Rest is training too!";
+    if(any(["split","splits","flexible","flexibility"]))
+      return "Splits come from little-and-often, not one big push! 🧘 Warm up first (never stretch cold), then hold half-splits for 45s each side and breathe out as you sink. Do it 4–5 days a week and you'll see it move. Head to Train → Mobility for the routine.";
+    if(any(["nervous","scared","show","exam","audition","stage","perform"]))
+      return "Those butterflies mean you care — every dancer gets them! ✨ Take 3 slow breaths (5-6-7-8 counts), picture yourself nailing the first 8-count, and remember: you've practised this. Go and enjoy it. You've got this, Milly! 🩰";
+    if(any(["sore","ache","hurt","aching","stiff"])){
+      return "Sore muscles after training is normal — that's them getting stronger 💪 Gentle movement, a warm bath and water all help. But sharp pain or something that won't settle? Tell your mum, dad or coach — no pushing through that.";
+    }
+    if(any(["motivat","lazy","can't be","cant be","don't want","dont want","bored"]))
+      return "Some days the hardest step is starting 🌟 Deal? Just do 5 minutes. Put one song on and move. Nearly always, once you start you'll want to keep going — and if not, 5 minutes still counts. "+(s>0?"Don't break that "+s+"-day streak! 🔥":"Let's start a streak today!");
+    if(any(["what","today","should i do","plan"])){
+      var f=FOCI[new Date().getDay()];
+      return "Today's focus is <b>"+f.t.replace(/&amp;/g,"&")+"</b> — "+f.l.replace(/&amp;/g,"&")+" "+(wk>0?"You've already logged "+wk+" this week, brilliant! 🎉":"Tap a quick-log on the Today screen to get going!");
+    }
+    if(any(["water","drink","hydrat","thirsty"]))
+      return "Great question! 💧 Aim for about 6 glasses across the day, and sip before, during and after dancing. Being even a little thirsty makes everything feel harder. Tick off your drops on the Today screen!";
+    if(any(["eat","food","nutrition","snack","hungry","fuel","breakfast"]))
+      return "Food is fuel for fun, strong dancing 🍓 Before class: a banana or toast. After: something with protein like milk, yoghurt or chicken to rebuild. Check the Fuel tab for easy ideas — and remember it's about eating enough, never less. 💛";
+    if(any(["swim","pool","swimming"]))
+      return "Love a swim day! 🏊 It builds stamina and gives your dance legs a proper rest. Keep it easy and smooth — there's a fun pool session in Train → Swim.";
+    if(any(["strong","strength","jump","muscle","power"]))
+      return "Strength is your secret weapon for higher jumps and soft landings 💪 Two short sessions a week is plenty at your age — glute bridges, calf raises and planks. It's all in Train → Strength!";
+    if(any(["turn","spin","pirouette","balance","spot"]))
+      return "Turns are all about spotting and pulling up tall! 🌀 Fix your eyes on one point, whip your head round last, and squeeze everything to your centre. Practise slowly first. There's a spotting drill in Train → Dance.";
+    if(any(["streak","how many","progress","doing"]))
+      return "Right now you're on a <b>"+s+"-day streak</b> 🔥 with "+wk+" session"+(wk===1?"":"s")+" this week. Head to the You tab to see all your wins and badges. Keep showing up — future-you will say thanks!";
+    if(any(["hi","hey","hello","yo","hiya"]))
+      return "Hey Milly! 👋 So good to see you. Want a plan for today, a stretch tip, or just a bit of a pep talk?";
+    if(any(["thank","thanks","love you","cool","nice","amazing"]))
+      return "Anytime! 🌟 I'm always here in the studio. Now go and dance like nobody's watching 🩰";
+    return "I'm your studio buddy — ask me about <b>splits</b>, <b>show nerves</b>, <b>what to do today</b>, <b>sore muscles</b>, <b>food</b> or <b>staying motivated</b>. Or just say hi! 💬";
+  }
+  function ask(text){
+    text=(text||"").trim();if(!text)return;
+    pushMsg("me",text.replace(/</g,"&lt;"));
+    setTimeout(function(){pushMsg("coach",coachReply(text));},360);
+  }
+
+  /* ---------- navigation ---------- */
+  function go(name){
+    document.querySelectorAll(".screen").forEach(function(s){s.classList.toggle("on",s.id==="tab-"+name);});
+    document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("on",t.getAttribute("data-go")===name);});
+    window.scrollTo(0,0);
+    if(name==="you")renderYou();
+    if(name==="coach"){var c=$("#chat");c.parentNode.scrollTop=99999;}
+  }
+
+  /* ---------- events (delegated) ---------- */
+  document.addEventListener("click",function(e){
+    var t=e.target.closest("[data-go],[data-go2],[data-log],[data-mood],[data-say],[data-del]");
+    if(!t)return;
+    if(t.hasAttribute("data-go"))return go(t.getAttribute("data-go"));
+    if(t.hasAttribute("data-go2"))return go(t.getAttribute("data-go2"));
+    if(t.hasAttribute("data-log")){e.preventDefault();return addLog(t.getAttribute("data-log"));}
+    if(t.hasAttribute("data-mood"))return setMood();
+    if(t.hasAttribute("data-say")){go("coach");return ask(t.getAttribute("data-say"));}
+    if(t.hasAttribute("data-del"))return delLog(t.getAttribute("data-del"));
+  });
+  $("#chat-send").onclick=function(){var i=$("#chat-input");ask(i.value);i.value="";i.focus();};
+  $("#chat-input").addEventListener("keydown",function(e){if(e.key==="Enter"){$("#chat-send").click();}});
+
+  $("#exportBtn").onclick=function(){
+    try{
+      var blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+      var a=document.createElement("a");a.href=URL.createObjectURL(blob);
+      a.download="milly-5678-data.json";document.body.appendChild(a);a.click();a.remove();
+      toast("Saved a backup 💾");
+    }catch(err){toast("Couldn't export here");}
+  };
+  $("#resetBtn").onclick=function(e){
+    e.preventDefault();
+    if(confirm("Start fresh? This clears all Milly's logs on this device.")){
+      localStorage.removeItem(KEY);state={logs:[],water:{},moods:{},chat:[],theme:state.theme};
+      $("#chat").innerHTML="";seedCoach();renderAll();go("today");toast("Fresh start ✨");
+    }
+  };
+
+  /* ---------- boot ---------- */
+  function seedCoach(){
+    if(state.chat.length){state.chat.forEach(function(m){pushMsg(m.who,m.text,true);});}
+    else{pushMsg("coach","Hey Milly! I'm <b>Coco</b>, your studio buddy 🩰 Tap a button below or ask me anything — a plan for today, a stretch tip, or a pep talk before a show!");}
+  }
+  seedCoach();
+  renderAll();
+})();
+</script>
+</body>
+</html>
