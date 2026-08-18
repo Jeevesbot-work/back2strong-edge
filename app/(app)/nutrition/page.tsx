@@ -17,6 +17,7 @@ import {
   sortRecipes,
   totalTimeMins,
 } from "@/lib/recipes-live";
+import { computeFuelAdjustment, type FuelAdjustment, type FuelGoal } from "@/lib/fuel-adaptive";
 
 // Recipe library palette — branded, typographic, image-free (per Fuel design brief).
 const RECIPE_INK = "#12151C"; // card surface
@@ -84,6 +85,13 @@ export default function NutritionPage() {
   const [calorieTarget, setCalorieTarget] = useState(DEFAULT_CALORIE_TARGET);
   const [week, setWeek] = useState<DayTotal[]>([]);
 
+  // Adaptive Fuel — computed once weight history + this week's adherence are in.
+  const [goal, setGoal] = useState<FuelGoal>(null);
+  const [weightPoints, setWeightPoints] = useState<{ date: string; kg: number }[]>([]);
+  const [adjustment, setAdjustment] = useState<FuelAdjustment | null>(null);
+  const [adjustmentSnoozed, setAdjustmentSnoozed] = useState(true); // true until we've checked localStorage
+  const [applyingAdjustment, setApplyingAdjustment] = useState(false);
+
   useEffect(() => { loadTodaysLogs(); loadTargetsAndWeek(); }, []);
 
   async function loadTargetsAndWeek() {
@@ -93,9 +101,10 @@ export default function NutritionPage() {
 
     // Client's own protein/calorie targets (fall back to defaults if unset).
     const { data: profile } = await supabase
-      .from("profiles").select("protein_target, calorie_target").eq("id", user.id).single();
+      .from("profiles").select("protein_target, calorie_target, goal").eq("id", user.id).single();
     if (profile?.protein_target && profile.protein_target > 0) setProteinTarget(profile.protein_target);
     if (profile?.calorie_target && profile.calorie_target > 0) setCalorieTarget(profile.calorie_target);
+    setGoal(profile?.goal ?? null);
 
     // Last 7 days of logs, collated per day for the weekly summary.
     const since = new Date();
@@ -116,6 +125,58 @@ export default function NutritionPage() {
       if (day) { day.protein += Number(r.protein_g) || 0; day.calories += Number(r.calories) || 0; }
     }
     setWeek(Array.from(byDay.values()));
+
+    // Last 28 days of weigh-ins (logged at check-in) — the trend Adaptive Fuel reasons over.
+    const monthAgo = new Date();
+    monthAgo.setDate(monthAgo.getDate() - 28);
+    const { data: checkIns } = await supabase
+      .from("check_ins").select("date, weight_kg")
+      .eq("user_id", user.id).not("weight_kg", "is", null)
+      .gte("date", monthAgo.toISOString().split("T")[0])
+      .order("date", { ascending: true });
+    setWeightPoints((checkIns ?? []).map((c) => ({ date: c.date as string, kg: Number(c.weight_kg) })));
+
+    // Snoozed for 7 days after dismissing, or 14 after accepting — keyed per client.
+    const snoozeKey = `edge_fuel_adjust_snooze_${user.id}`;
+    const snoozedUntil = Number(localStorage.getItem(snoozeKey) ?? 0);
+    setAdjustmentSnoozed(Date.now() < snoozedUntil);
+  }
+
+  useEffect(() => {
+    if (adjustmentSnoozed) { setAdjustment(null); return; }
+    setAdjustment(
+      computeFuelAdjustment({
+        weightPoints,
+        weekProteinDays: week.map((d) => ({ date: d.date, protein: d.protein })),
+        proteinTarget,
+        goal,
+      })
+    );
+  }, [weightPoints, week, proteinTarget, goal, adjustmentSnoozed]);
+
+  function snoozeAdjustment(days: number) {
+    (async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      localStorage.setItem(`edge_fuel_adjust_snooze_${user.id}`, String(Date.now() + days * 86400000));
+    })();
+    setAdjustment(null);
+  }
+
+  async function applyAdjustment() {
+    if (!adjustment) return;
+    setApplyingAdjustment(true);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setApplyingAdjustment(false); return; }
+    const delta = adjustment.direction === "increase" ? adjustment.amountKcal : -adjustment.amountKcal;
+    const newTarget = Math.max(1200, calorieTarget + delta);
+    await supabase.from("profiles").update({ calorie_target: newTarget }).eq("id", user.id);
+    setCalorieTarget(newTarget);
+    localStorage.setItem(`edge_fuel_adjust_snooze_${user.id}`, String(Date.now() + 14 * 86400000));
+    setAdjustment(null);
+    setApplyingAdjustment(false);
   }
 
   useEffect(() => {
@@ -399,6 +460,15 @@ export default function NutritionPage() {
           )}
 
           <WeekSummary week={week} proteinTarget={proteinTarget} />
+
+          {adjustment && (
+            <FuelAdjustmentCard
+              adjustment={adjustment}
+              applying={applyingAdjustment}
+              onApply={applyAdjustment}
+              onDismiss={() => snoozeAdjustment(7)}
+            />
+          )}
 
           {logs.length > 0 && (
             <div className="anim-3 mb-6">
@@ -763,6 +833,53 @@ function FuelOnTheRoad() {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function FuelAdjustmentCard({
+  adjustment,
+  applying,
+  onApply,
+  onDismiss,
+}: {
+  adjustment: FuelAdjustment;
+  applying: boolean;
+  onApply: () => void;
+  onDismiss: () => void;
+}) {
+  const up = adjustment.direction === "increase";
+  return (
+    <div className="anim-3 mb-6 bg-edge-surface rounded-[20px] border border-edge-bronze/30 overflow-hidden">
+      <div className="bg-edge-bronze/10 px-4 py-3 flex items-center gap-2 border-b border-edge-bronze/20">
+        <div className="w-6 h-6 rounded-full bg-edge-bronze flex items-center justify-center flex-shrink-0">
+          <span className="font-condensed font-black text-xs text-edge-bg">E</span>
+        </div>
+        <p className="font-condensed font-bold text-xs uppercase tracking-widest text-edge-bronze">Edge Adjustment</p>
+      </div>
+      <div className="p-4">
+        <p className="font-condensed font-bold text-lg text-white mb-1">
+          {up ? "+" : "−"}{adjustment.amountKcal} kcal / day
+        </p>
+        <p className="text-white/70 text-sm leading-relaxed mb-4">{adjustment.reason}</p>
+        <p className="text-edge-muted text-xs mb-4">Based on your check-in weight and this week's logging. Changed since baseline — not a claim about what caused it.</p>
+        <div className="flex gap-2">
+          <button
+            onClick={onApply}
+            disabled={applying}
+            className="pressable flex-1 bg-edge-bronze rounded-xl py-3 font-condensed font-bold text-sm uppercase tracking-widest text-white transition-transform disabled:opacity-60"
+          >
+            {applying ? "Updating…" : "Update My Target"}
+          </button>
+          <button
+            onClick={onDismiss}
+            disabled={applying}
+            className="pressable px-4 rounded-xl border border-white/10 font-condensed font-bold text-xs uppercase tracking-widest text-edge-muted"
+          >
+            Not Now
+          </button>
+        </div>
       </div>
     </div>
   );
