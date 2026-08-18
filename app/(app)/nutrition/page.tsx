@@ -18,6 +18,8 @@ import {
   totalTimeMins,
 } from "@/lib/recipes-live";
 import { computeFuelAdjustment, type FuelAdjustment, type FuelGoal } from "@/lib/fuel-adaptive";
+import { rankRecipesForRemaining } from "@/lib/recipe-suggestions";
+import { buildShoppingList, type ShoppingListItem } from "@/lib/shopping-list";
 
 // Recipe library palette — branded, typographic, image-free (per Fuel design brief).
 const RECIPE_INK = "#12151C"; // card surface
@@ -59,6 +61,14 @@ interface DayTotal {
   calories: number;
 }
 
+// Shared coaching line for any logged item — used for barcode scans, and
+// for one-tap logging a recipe straight from its detail screen.
+function proteinComment(protein_g: number): string {
+  return protein_g >= 20 ? "Solid grab. That's real protein doing the work — exactly what we're after."
+    : protein_g >= 10 ? "Decent. A bit more protein alongside it and you're flying."
+    : "Fuel more than protein. Fine now and then — just don't let it be the whole meal.";
+}
+
 export default function NutritionPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -79,6 +89,14 @@ export default function NutritionPage() {
   const [scanLoading, setScanLoading] = useState(false);
   const [scanned, setScanned] = useState<ScannedProduct | null>(null);
   const [scanGrams, setScanGrams] = useState(100);
+
+  // Hero Meals — a client's own starred rotation, plus macro-matched
+  // suggestions and the shopping list built from whatever's currently starred.
+  const [heroMealIds, setHeroMealIds] = useState<Set<string>>(new Set());
+  const [heroLoaded, setHeroLoaded] = useState(false);
+  const [heroActionError, setHeroActionError] = useState(false);
+  const [recipeFilter, setRecipeFilter] = useState<"all" | "for-you" | "hero">("all");
+  const [shoppingListOpen, setShoppingListOpen] = useState(false);
 
   // Per-client targets (default until the profile loads) + last-7-days history.
   const [proteinTarget, setProteinTarget] = useState(DEFAULT_PROTEIN_TARGET);
@@ -183,7 +201,10 @@ export default function NutritionPage() {
     if (tab === "recipes" && recipes === null && !recipesLoading && !recipesError) {
       loadRecipes();
     }
-  }, [tab, recipes, recipesLoading, recipesError]);
+    if (tab === "recipes" && !heroLoaded) {
+      loadHeroMeals();
+    }
+  }, [tab, recipes, recipesLoading, recipesError, heroLoaded]);
 
   async function loadRecipes() {
     setRecipesLoading(true);
@@ -201,6 +222,75 @@ export default function NutritionPage() {
     } finally {
       setRecipesLoading(false);
     }
+  }
+
+  async function loadHeroMeals() {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data, error } = await supabase.from("hero_meals").select("recipe_id").eq("user_id", user.id);
+      if (error) throw error;
+      setHeroMealIds(new Set((data ?? []).map((r) => r.recipe_id as string)));
+    } catch {
+      // Table may not exist yet, or the request failed — Hero Meals just won't
+      // show as starred rather than breaking the rest of the Fuel tab.
+    } finally {
+      setHeroLoaded(true);
+    }
+  }
+
+  async function toggleHero(recipeId: string) {
+    const wasHero = heroMealIds.has(recipeId);
+    setHeroMealIds((prev) => {
+      const next = new Set(prev);
+      if (wasHero) next.delete(recipeId); else next.add(recipeId);
+      return next;
+    });
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("not signed in");
+      const { error } = wasHero
+        ? await supabase.from("hero_meals").delete().eq("user_id", user.id).eq("recipe_id", recipeId)
+        : await supabase.from("hero_meals").insert({ user_id: user.id, recipe_id: recipeId });
+      if (error) throw error;
+    } catch {
+      // Revert the optimistic update and say so briefly — never leave the
+      // star showing a state that didn't actually save.
+      setHeroMealIds((prev) => {
+        const next = new Set(prev);
+        if (wasHero) next.add(recipeId); else next.delete(recipeId);
+        return next;
+      });
+      setHeroActionError(true);
+      setTimeout(() => setHeroActionError(false), 3000);
+    }
+  }
+
+  async function logRecipe(recipe: LiveRecipe) {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setError("Session expired — reopen the app and try again."); return; }
+    const protein_g = recipe.protein_g ?? 0;
+    const { data: log, error: insErr } = await supabase
+      .from("nutrition_logs")
+      .insert({
+        user_id: user.id,
+        meal_name: recipe.title,
+        calories: recipe.calories ?? 0,
+        protein_g,
+        carbs_g: recipe.carbs_g ?? 0,
+        fat_g: recipe.fat_g ?? 0,
+        edge_comment: proteinComment(protein_g),
+      })
+      .select()
+      .single();
+    if (insErr || !log) { setError("Couldn't log that meal. Try again."); return; }
+    setLogs((prev) => [log, ...prev]);
+    setLatest(log);
+    setOpenRecipe(null);
+    setTab("today");
   }
 
   async function loadTodaysLogs() {
@@ -277,10 +367,7 @@ export default function NutritionPage() {
     const carbs_g = Math.round(b.carbs_g * factor * 10) / 10;
     const fat_g = Math.round(b.fat_g * factor * 10) / 10;
 
-    const edge_comment =
-      protein_g >= 20 ? "Solid grab. That's real protein doing the work — exactly what we're after."
-      : protein_g >= 10 ? "Decent. A bit more protein alongside it and you're flying."
-      : "Fuel more than protein. Fine now and then — just don't let it be the whole meal.";
+    const edge_comment = proteinComment(protein_g);
 
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -314,8 +401,28 @@ export default function NutritionPage() {
   const totalFat = logs.reduce((s, l) => s + l.fat_g, 0);
   const proteinPct = Math.min((totalProtein / proteinTarget) * 100, 100);
   const caloriePct = Math.min((totalCalories / calorieTarget) * 100, 100);
+  const remaining = { protein: proteinTarget - totalProtein, calories: calorieTarget - totalCalories };
 
-  if (openRecipe) return <RecipeDetail recipe={openRecipe} onBack={() => setOpenRecipe(null)} />;
+  if (shoppingListOpen) {
+    return (
+      <ShoppingListScreen
+        recipes={(recipes ?? []).filter((r) => heroMealIds.has(r.id))}
+        onBack={() => setShoppingListOpen(false)}
+      />
+    );
+  }
+
+  if (openRecipe) {
+    return (
+      <RecipeDetail
+        recipe={openRecipe}
+        isHero={heroMealIds.has(openRecipe.id)}
+        onToggleHero={() => toggleHero(openRecipe.id)}
+        onLog={() => logRecipe(openRecipe)}
+        onBack={() => setOpenRecipe(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-edge-bg max-w-lg mx-auto px-4 pt-safe pb-24">
@@ -514,6 +621,13 @@ export default function NutritionPage() {
           error={recipesError}
           onRetry={loadRecipes}
           onOpen={setOpenRecipe}
+          heroMealIds={heroMealIds}
+          onToggleHero={toggleHero}
+          heroActionError={heroActionError}
+          filter={recipeFilter}
+          onFilterChange={setRecipeFilter}
+          remaining={remaining}
+          onOpenShoppingList={() => setShoppingListOpen(true)}
         />
       )}
 
@@ -530,12 +644,26 @@ function RecipeLibrary({
   error,
   onRetry,
   onOpen,
+  heroMealIds,
+  onToggleHero,
+  heroActionError,
+  filter,
+  onFilterChange,
+  remaining,
+  onOpenShoppingList,
 }: {
   recipes: LiveRecipe[] | null;
   loading: boolean;
   error: boolean;
   onRetry: () => void;
   onOpen: (r: LiveRecipe) => void;
+  heroMealIds: Set<string>;
+  onToggleHero: (recipeId: string) => void;
+  heroActionError: boolean;
+  filter: "all" | "for-you" | "hero";
+  onFilterChange: (f: "all" | "for-you" | "hero") => void;
+  remaining: { protein: number; calories: number };
+  onOpenShoppingList: () => void;
 }) {
   if (loading || recipes === null) {
     return (
@@ -571,43 +699,131 @@ function RecipeLibrary({
     );
   }
 
-  const groups = CATEGORY_ORDER
-    .map((category) => ({ category, items: recipes.filter((r) => r.category === category) }))
-    .filter((g) => g.items.length > 0);
+  const heroRecipes = recipes.filter((r) => heroMealIds.has(r.id));
+  const forYouRecipes = rankRecipesForRemaining(recipes, remaining).slice(0, 12);
+  const shown = filter === "hero" ? heroRecipes : filter === "for-you" ? forYouRecipes : recipes;
+  const groups = filter === "for-you"
+    ? null // ranked order, not grouped by category
+    : CATEGORY_ORDER.map((category) => ({ category, items: shown.filter((r) => r.category === category) })).filter((g) => g.items.length > 0);
+
+  const cardProps = { heroMealIds, onToggleHero };
 
   return (
     <div>
-      <p className="text-edge-muted text-xs leading-relaxed mb-6">
-        High-protein recipes built for men who train. Protein first — that&apos;s the number that matters.
-      </p>
-      {groups.map((group, gi) => (
-        <div key={group.category} className={`mb-8 anim-${Math.min(gi, 4)}`}>
-          <p
-            className="font-condensed font-bold text-xs uppercase tracking-[0.2em] mb-3"
-            style={{ color: RECIPE_BRASS }}
-          >
-            {CATEGORY_LABEL[group.category]}
+      <div className="flex gap-2 mb-5">
+        <FilterChip active={filter === "all"} onClick={() => onFilterChange("all")}>All</FilterChip>
+        <FilterChip active={filter === "for-you"} onClick={() => onFilterChange("for-you")}>For You</FilterChip>
+        <FilterChip active={filter === "hero"} onClick={() => onFilterChange("hero")}>Hero Meals{heroRecipes.length > 0 ? ` (${heroRecipes.length})` : ""}</FilterChip>
+      </div>
+
+      {heroActionError && (
+        <div className="mb-4 bg-edge-red/10 border border-edge-red/30 rounded-xl p-3">
+          <p className="text-edge-red text-xs">Couldn&apos;t save that — try again.</p>
+        </div>
+      )}
+
+      {filter === "all" && (
+        <p className="text-edge-muted text-xs leading-relaxed mb-6">
+          High-protein recipes built for men who train. Protein first — that&apos;s the number that matters.
+        </p>
+      )}
+
+      {filter === "for-you" && (
+        <p className="text-edge-muted text-xs leading-relaxed mb-6">
+          {remaining.protein > 0 || remaining.calories > 0
+            ? `Matched to what you've got left today — roughly ${Math.max(0, Math.round(remaining.protein))}g protein, ${Math.max(0, Math.round(remaining.calories))} kcal.`
+            : "Today's targets are covered — these are still your most protein-efficient options."}
+        </p>
+      )}
+
+      {filter === "hero" && (
+        <div className="mb-6">
+          <p className="text-edge-muted text-xs leading-relaxed mb-4">
+            Your go-to rotation. Star meals from the full list and they land here — one tap to log, one tap for the shopping list.
           </p>
+          {heroRecipes.length > 0 && (
+            <button
+              onClick={onOpenShoppingList}
+              className="pressable w-full bg-edge-bronze rounded-xl py-3 font-condensed font-bold text-xs uppercase tracking-widest text-white flex items-center justify-center gap-2"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m-10 4a1 1 0 100 2 1 1 0 000-2zm10 0a1 1 0 100 2 1 1 0 000-2z" /></svg>
+              Generate Shopping List
+            </button>
+          )}
+        </div>
+      )}
+
+      {shown.length === 0 && filter === "hero" && (
+        <div className="text-center py-12">
+          <p className="text-white/80 text-sm mb-1">No hero meals yet.</p>
+          <p className="text-edge-muted text-xs">Star a few meals from &quot;All&quot; and build your rotation.</p>
+        </div>
+      )}
+
+      {shown.length === 0 && filter === "for-you" && (
+        <div className="text-center py-12">
+          <p className="text-white/80 text-sm mb-1">Nothing measurable to suggest yet.</p>
+          <p className="text-edge-muted text-xs">Browse &quot;All&quot; instead.</p>
+        </div>
+      )}
+
+      {groups
+        ? groups.map((group, gi) => (
+            <div key={group.category} className={`mb-8 anim-${Math.min(gi, 4)}`}>
+              <p className="font-condensed font-bold text-xs uppercase tracking-[0.2em] mb-3" style={{ color: RECIPE_BRASS }}>
+                {CATEGORY_LABEL[group.category]}
+              </p>
+              <div className="space-y-2">
+                {group.items.map((recipe) => (
+                  <RecipeCard key={recipe.id} recipe={recipe} onOpen={onOpen} {...cardProps} />
+                ))}
+              </div>
+            </div>
+          ))
+        : (
           <div className="space-y-2">
-            {group.items.map((recipe) => (
-              <RecipeCard key={recipe.id} recipe={recipe} onOpen={onOpen} />
+            {shown.map((recipe) => (
+              <RecipeCard key={recipe.id} recipe={recipe} onOpen={onOpen} {...cardProps} />
             ))}
           </div>
-        </div>
-      ))}
+        )}
     </div>
   );
 }
 
-function RecipeCard({ recipe, onOpen }: { recipe: LiveRecipe; onOpen: (r: LiveRecipe) => void }) {
-  const time = totalTimeMins(recipe);
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
-      onClick={() => onOpen(recipe)}
-      className="pressable w-full rounded-2xl p-4 border border-white/[0.06] flex items-center gap-4 text-left"
+      onClick={onClick}
+      className="pressable px-3.5 py-2 rounded-lg font-condensed font-bold text-[11px] uppercase tracking-wide transition-all"
+      style={active
+        ? { backgroundColor: RECIPE_BRASS, color: RECIPE_INK }
+        : { backgroundColor: "rgba(255,255,255,0.05)", color: "#9BA3AF" }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function RecipeCard({
+  recipe,
+  onOpen,
+  heroMealIds,
+  onToggleHero,
+}: {
+  recipe: LiveRecipe;
+  onOpen: (r: LiveRecipe) => void;
+  heroMealIds: Set<string>;
+  onToggleHero: (recipeId: string) => void;
+}) {
+  const time = totalTimeMins(recipe);
+  const isHero = heroMealIds.has(recipe.id);
+  return (
+    <div
+      className="w-full rounded-2xl p-4 border border-white/[0.06] flex items-center gap-4 text-left"
       style={{ backgroundColor: RECIPE_INK }}
     >
-      <div className="flex-1 min-w-0">
+      <button onClick={() => onOpen(recipe)} className="flex-1 min-w-0 text-left">
         <p
           className="font-condensed font-bold text-[10px] uppercase tracking-[0.22em] mb-1.5"
           style={{ color: RECIPE_BRASS }}
@@ -628,9 +844,17 @@ function RecipeCard({ recipe, onOpen }: { recipe: LiveRecipe; onOpen: (r: LiveRe
           {recipe.protein_g != null && <MetaChip accent>{recipe.protein_g}g protein</MetaChip>}
           {time > 0 && <MetaChip>{time} min</MetaChip>}
         </div>
-      </div>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4 text-edge-muted flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-    </button>
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggleHero(recipe.id); }}
+        aria-label={isHero ? "Remove from hero meals" : "Star as hero meal"}
+        className="flex-shrink-0 w-8 h-8 flex items-center justify-center"
+      >
+        <svg viewBox="0 0 24 24" fill={isHero ? RECIPE_BRASS : "none"} stroke={isHero ? RECIPE_BRASS : "#9BA3AF"} strokeWidth={1.5} className="w-5 h-5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.562.562 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.562.562 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+        </svg>
+      </button>
+    </div>
   );
 }
 
@@ -649,7 +873,19 @@ function MetaChip({ children, accent }: { children: React.ReactNode; accent?: bo
   );
 }
 
-function RecipeDetail({ recipe, onBack }: { recipe: LiveRecipe; onBack: () => void }) {
+function RecipeDetail({
+  recipe,
+  isHero,
+  onToggleHero,
+  onLog,
+  onBack,
+}: {
+  recipe: LiveRecipe;
+  isHero: boolean;
+  onToggleHero: () => void;
+  onLog: () => void;
+  onBack: () => void;
+}) {
   const time = totalTimeMins(recipe);
   const metaBits = [
     recipe.servings != null ? `Serves ${recipe.servings}` : null,
@@ -659,14 +895,23 @@ function RecipeDetail({ recipe, onBack }: { recipe: LiveRecipe; onBack: () => vo
   ].filter(Boolean) as string[];
 
   return (
-    <div className="min-h-screen bg-edge-bg max-w-lg mx-auto px-4 pt-safe pb-24">
+    <div className="min-h-screen bg-edge-bg max-w-lg mx-auto px-4 pt-safe pb-32">
       <div className="flex items-center gap-3 py-4 mb-6">
         <button onClick={onBack} className="w-9 h-9 rounded-xl bg-edge-surface border border-white/10 flex items-center justify-center flex-shrink-0">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4 text-white"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
         </button>
-        <p className="font-condensed font-bold text-xs uppercase tracking-[0.2em]" style={{ color: RECIPE_BRASS }}>
+        <p className="font-condensed font-bold text-xs uppercase tracking-[0.2em] flex-1" style={{ color: RECIPE_BRASS }}>
           {CATEGORY_LABEL[recipe.category]}
         </p>
+        <button
+          onClick={onToggleHero}
+          aria-label={isHero ? "Remove from hero meals" : "Star as hero meal"}
+          className="w-9 h-9 rounded-xl bg-edge-surface border border-white/10 flex items-center justify-center flex-shrink-0"
+        >
+          <svg viewBox="0 0 24 24" fill={isHero ? RECIPE_BRASS : "none"} stroke={isHero ? RECIPE_BRASS : "#9BA3AF"} strokeWidth={1.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.562.562 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.562.562 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+          </svg>
+        </button>
       </div>
 
       <h1 className="font-display font-semibold text-4xl leading-tight mb-3" style={{ color: RECIPE_CREAM }}>{recipe.title}</h1>
@@ -723,6 +968,101 @@ function RecipeDetail({ recipe, onBack }: { recipe: LiveRecipe; onBack: () => vo
             </span>
           ))}
         </div>
+      )}
+
+      <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto px-4 pb-6 pt-4" style={{ background: "linear-gradient(to top, #0E1014 60%, transparent)" }}>
+        <button
+          onClick={onLog}
+          className="pressable w-full rounded-2xl py-4 text-center font-condensed font-bold text-sm uppercase tracking-[0.15em]"
+          style={{ backgroundColor: RECIPE_BRASS, color: RECIPE_INK }}
+        >
+          Log This
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ShoppingListScreen({ recipes, onBack }: { recipes: LiveRecipe[]; onBack: () => void }) {
+  const items: ShoppingListItem[] = buildShoppingList(
+    recipes.map((r) => ({ recipeTitle: r.title, ingredients: r.ingredients }))
+  );
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+
+  const toggle = (display: string) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(display)) next.delete(display);
+      else next.add(display);
+      return next;
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-edge-bg max-w-lg mx-auto px-4 pt-safe pb-24">
+      <div className="flex items-center gap-3 py-4 mb-6">
+        <button onClick={onBack} className="w-9 h-9 rounded-xl bg-edge-surface border border-white/10 flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4 text-white"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+        </button>
+        <div>
+          <h1 className="font-display font-semibold text-2xl leading-tight" style={{ color: RECIPE_CREAM }}>Shopping List</h1>
+          <p className="text-edge-secondary text-xs mt-0.5">
+            {recipes.length === 0 ? "No hero meals starred yet" : `From ${recipes.length} hero meal${recipes.length === 1 ? "" : "s"}`}
+          </p>
+        </div>
+      </div>
+
+      {recipes.length === 0 ? (
+        <div className="rounded-2xl border border-white/10 bg-edge-surface px-5 py-8 text-center">
+          <p className="text-white/70 text-sm leading-relaxed">
+            Star a few meals from your Recipes tab as Hero Meals, then come back here — we&apos;ll merge every ingredient into one list.
+          </p>
+        </div>
+      ) : items.length === 0 ? (
+        <div className="rounded-2xl border border-white/10 bg-edge-surface px-5 py-8 text-center">
+          <p className="text-white/70 text-sm leading-relaxed">Those hero meals don&apos;t have ingredients listed yet.</p>
+        </div>
+      ) : (
+        <>
+          <p className="text-edge-muted text-xs mb-4">{checked.size} of {items.length} ticked off</p>
+          <ul className="space-y-2 mb-8">
+            {items.map((item) => {
+              const isChecked = checked.has(item.display);
+              return (
+                <li key={item.display}>
+                  <button
+                    onClick={() => toggle(item.display)}
+                    className="w-full flex items-start gap-3 rounded-xl px-4 py-3.5 text-left transition-colors"
+                    style={{ backgroundColor: RECIPE_INK, border: "1px solid rgba(255,255,255,0.08)" }}
+                  >
+                    <span
+                      className="w-5 h-5 rounded-md border flex-shrink-0 mt-0.5 flex items-center justify-center"
+                      style={{
+                        borderColor: isChecked ? RECIPE_BRASS : "rgba(255,255,255,0.25)",
+                        backgroundColor: isChecked ? RECIPE_BRASS : "transparent",
+                      }}
+                    >
+                      {isChecked && (
+                        <svg viewBox="0 0 24 24" fill="none" stroke={RECIPE_INK} strokeWidth={3} className="w-3 h-3">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M20 6L9 17l-5-5" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="flex-1">
+                      <span
+                        className="block text-sm leading-snug"
+                        style={{ color: isChecked ? "#6B7280" : "rgba(255,255,255,0.9)", textDecoration: isChecked ? "line-through" : "none" }}
+                      >
+                        {item.display}
+                      </span>
+                      <span className="block text-[11px] text-edge-muted mt-1">{item.usedIn.join(" · ")}</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </div>
   );

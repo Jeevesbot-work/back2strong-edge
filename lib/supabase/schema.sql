@@ -218,3 +218,22 @@ DROP TRIGGER IF EXISTS client_programmes_updated_at ON client_programmes;
 CREATE TRIGGER client_programmes_updated_at
   BEFORE UPDATE ON client_programmes
   FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
+
+-- =====================
+-- Hero Meals (migration 0003) — client-starred recipes, used to build shopping lists
+-- =====================
+CREATE TABLE IF NOT EXISTS hero_meals (
+  id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id    UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  recipe_id  TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (user_id, recipe_id)
+);
+
+ALTER TABLE hero_meals ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage own hero meals" ON hero_meals;
+CREATE POLICY "Users can manage own hero meals"
+  ON hero_meals FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
