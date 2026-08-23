@@ -5,9 +5,13 @@ import CommandCentre from "./CommandCentre";
 const ADMIN_EMAILS = ["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"];
 
 export default async function AdminPage() {
+  // TEMP: single-user open access — set back to true to re-gate the Command
+  // Centre behind admin login. NOTE: while false, anyone with the URL can read
+  // all client data. Add real gatekeeping before sharing the link.
+  const REQUIRE_ADMIN_LOGIN = false;
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !ADMIN_EMAILS.includes(user.email ?? "")) redirect("/login");
+  if (REQUIRE_ADMIN_LOGIN && (!user || !ADMIN_EMAILS.includes(user.email ?? ""))) redirect("/login");
 
   const admin = createAdminClient();
 

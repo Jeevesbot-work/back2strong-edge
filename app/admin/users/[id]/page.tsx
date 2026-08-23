@@ -11,9 +11,12 @@ import MessageClientBox from "./MessageClientBox";
 import WeightTrendChart from "./WeightTrendChart";
 
 export default async function AdminUserPage({ params }: { params: { id: string } }) {
+  // TEMP: single-user open access — set back to true to re-gate behind admin
+  // login. While false, anyone with the URL can read this client's data.
+  const REQUIRE_ADMIN_LOGIN = false;
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !["n.adams3@icloud.com","nicosmada3@googlemail.com","nick@back2strong.online"].includes(user.email ?? "")) redirect("/login");
+  if (REQUIRE_ADMIN_LOGIN && (!user || !["n.adams3@icloud.com","nicosmada3@googlemail.com","nick@back2strong.online"].includes(user.email ?? ""))) redirect("/login");
 
   const admin = createAdminClient();
   const userId = params.id;
