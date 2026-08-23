@@ -8,6 +8,7 @@ import ResendLinkButton from "./ResendLinkButton";
 import AssignProgrammeButton from "./AssignProgrammeButton";
 import SetWeekButton from "./SetWeekButton";
 import MessageClientBox from "./MessageClientBox";
+import WeightTrendChart from "./WeightTrendChart";
 
 export default async function AdminUserPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -24,6 +25,9 @@ export default async function AdminUserPage({ params }: { params: { id: string }
     { data: checkIns },
     { data: messages },
     { data: adminNotes },
+    { data: trainingSessions },
+    { data: nutritionLogs },
+    { data: walkLogs },
   ] = await Promise.all([
     admin.from("profiles").select("*").eq("id", userId).single(),
     admin.from("programme_state").select("*").eq("user_id", userId).single(),
@@ -31,11 +35,58 @@ export default async function AdminUserPage({ params }: { params: { id: string }
     admin.from("check_ins").select("*").eq("user_id", userId).order("date", { ascending: false }).limit(14),
     admin.from("messages").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(20),
     admin.from("admin_notes").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
+    admin.from("training_sessions").select("*").eq("user_id", userId).order("completed_at", { ascending: false, nullsFirst: false }).limit(10),
+    admin.from("nutrition_logs").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(10),
+    admin.from("walk_logs").select("*").eq("user_id", userId).order("date", { ascending: false }).limit(10),
   ]);
 
   const avgEnergy = checkIns?.length
     ? (checkIns.reduce((s, c) => s + c.morning_energy, 0) / checkIns.length).toFixed(1)
     : "—";
+
+  // Weight trend — oldest to newest, only rows where weight was actually logged.
+  const weightPoints = (checkIns ?? [])
+    .filter((c) => c.weight_kg != null)
+    .map((c) => ({ date: c.date as string, weight: Number(c.weight_kg) }))
+    .reverse();
+  const latestWeight = weightPoints.at(-1)?.weight ?? profile?.body_weight_kg ?? null;
+  const earliestWeight = weightPoints[0]?.weight ?? null;
+  const weightDelta = latestWeight != null && earliestWeight != null ? +(latestWeight - earliestWeight).toFixed(1) : null;
+
+  // Unified activity timeline — check-ins, training sessions, meals, walks.
+  type ActEvent = { kind: "checkin" | "training" | "meal" | "walk"; time: string; label: string; detail: string };
+  const events: ActEvent[] = [
+    ...(checkIns ?? []).map((c) => ({
+      kind: "checkin" as const,
+      time: c.created_at ?? c.date,
+      label: "Checked in",
+      detail: `Energy ${c.morning_energy}/5 · Sleep ${c.sleep_quality}/5${c.weight_kg ? ` · ${c.weight_kg}kg` : ""}`,
+    })),
+    ...(trainingSessions ?? []).map((s) => ({
+      kind: "training" as const,
+      time: s.completed_at ?? s.created_at,
+      label: s.session_type ? `Trained · ${s.session_type}` : "Trained",
+      detail: s.duration_minutes ? `${s.duration_minutes} min` : "Session logged",
+    })),
+    ...(nutritionLogs ?? []).map((n) => ({
+      kind: "meal" as const,
+      time: n.created_at,
+      label: `Logged ${n.meal_name ?? "a meal"}`,
+      detail: `${n.protein_g ?? 0}g protein · ${n.calories ?? 0} kcal`,
+    })),
+    ...(walkLogs ?? []).map((w) => ({
+      kind: "walk" as const,
+      time: w.created_at ?? w.date,
+      label: "Walked",
+      detail: `${w.minutes} min`,
+    })),
+  ]
+    .filter((e) => !!e.time)
+    .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+    .slice(0, 20);
+
+  const eventColor = { checkin: "#34D399", training: "#60A5FA", meal: "#F5A623", walk: "#C8965A" } as const;
+  const eventLabel = { checkin: "Check-in", training: "Training", meal: "Meal", walk: "Walk" } as const;
 
   return (
     <div className="min-h-screen bg-edge-bg max-w-2xl mx-auto px-4 py-8">
@@ -80,6 +131,8 @@ export default async function AdminUserPage({ params }: { params: { id: string }
             { label: "Days/week", value: profile?.days_per_week ?? 3 },
             { label: "Programme day", value: programme?.current_day ?? 1 },
             { label: "Avg energy", value: `${avgEnergy}/5` },
+            { label: "Weight", value: latestWeight != null ? `${latestWeight}kg` : "—" },
+            { label: "Weight change", value: weightDelta != null ? `${weightDelta > 0 ? "+" : ""}${weightDelta}kg` : "—" },
           ].map(({ label, value }) => (
             <div key={label}>
               <p className="text-edge-muted text-xs uppercase tracking-widest font-condensed">{label}</p>
@@ -186,10 +239,50 @@ export default async function AdminUserPage({ params }: { params: { id: string }
         <AddNoteForm userId={userId} />
       </div>
 
+      {/* Weight trend — visual, at a glance */}
+      <div className="mb-4">
+        <h2 className="font-condensed font-bold text-xs uppercase tracking-widest text-edge-muted mb-3">
+          Weight Trend
+        </h2>
+        <WeightTrendChart points={weightPoints} />
+      </div>
+
+      {/* Unified activity — check-ins, training, meals, walks in one feed */}
+      <div className="mb-4">
+        <h2 className="font-condensed font-bold text-xs uppercase tracking-widest text-edge-muted mb-3">
+          Activity Timeline
+        </h2>
+        <div className="bg-edge-surface rounded-xl border border-white/[0.08] divide-y divide-white/[0.06]">
+          {events.length === 0 && (
+            <p className="text-edge-muted text-xs font-body p-4">No activity logged yet.</p>
+          )}
+          {events.map((e, i) => (
+            <div key={i} className="flex items-center gap-3 p-3">
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: eventColor[e.kind] }} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-white text-sm font-body">{e.label}</p>
+                  <span
+                    className="text-[9px] uppercase tracking-wider font-condensed px-1.5 py-0.5 rounded"
+                    style={{ color: eventColor[e.kind], background: `${eventColor[e.kind]}1A` }}
+                  >
+                    {eventLabel[e.kind]}
+                  </span>
+                </div>
+                <p className="text-edge-muted text-xs font-body">{e.detail}</p>
+              </div>
+              <p className="text-edge-muted text-xs font-body flex-shrink-0">
+                {new Date(e.time).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Check-ins */}
       <div className="mb-4">
         <h2 className="font-condensed font-bold text-xs uppercase tracking-widest text-edge-muted mb-3">
-          Recent Check-ins
+          Recent Check-ins (with Edge&apos;s response)
         </h2>
         <div className="space-y-2">
           {checkIns?.slice(0, 7).map((c) => (
