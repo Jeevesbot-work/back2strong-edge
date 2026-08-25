@@ -67,6 +67,7 @@ export default function ExercisesPage() {
         let q = supabase
           .from("exercises")
           .select(EXERCISE_COLUMNS)
+          .eq("in_library", true) // coach-curated set only — hides the full 1,500-row dataset
           .order("name", { ascending: true })
           .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
 
@@ -149,7 +150,7 @@ export default function ExercisesPage() {
         </button>
         <div>
           <h1 className="font-display text-3xl leading-none">Exercises</h1>
-          <p className="text-edge-muted text-xs">Movement library · 1,500 demos</p>
+          <p className="text-edge-muted text-xs">Squat · hinge · push · pull</p>
         </div>
       </div>
 

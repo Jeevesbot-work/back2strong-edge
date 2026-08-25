@@ -114,7 +114,7 @@ export default async function TrainPage() {
             <span style={{ fontSize: 18 }}>💪</span>
             <div style={{ flex: 1 }}>
               <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: "#F2F1ED" }}>Exercise library</p>
-              <p style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: "#9BA3AF" }}>1,500 demos — search by muscle or kit</p>
+              <p style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: "#9BA3AF" }}>Demos — search by muscle or kit</p>
             </div>
             <svg viewBox="0 0 24 24" fill="none" stroke="#3D434D" strokeWidth={2} style={{ width: 16, height: 16 }}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />

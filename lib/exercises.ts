@@ -27,52 +27,29 @@ export const EXERCISE_COLUMNS =
 // payload light on mobile, large enough to fill a couple of scrolls.
 export const PAGE_SIZE = 24;
 
-// Facet vocabularies, in the order they should appear as filter chips. These
-// mirror the distinct values present in the table today; if new values are ever
-// added they simply won't have a chip until this list is updated (the data still
-// loads fine — it just isn't filterable by the new value).
+// Facet vocabularies, in the order they should appear as filter chips. Scoped to
+// the values that actually occur in the curated in-library set (55 exercises), so
+// no chip ever returns an empty result. If the curated set grows to include a new
+// body part or equipment type, add it here.
 export const BODY_PARTS: string[] = [
+  "upper legs",
+  "lower legs",
   "back",
   "chest",
   "shoulders",
   "upper arms",
-  "lower arms",
-  "upper legs",
-  "lower legs",
   "waist",
-  "neck",
-  "cardio",
 ];
 
 export const EQUIPMENTS: string[] = [
-  "body weight",
-  "dumbbell",
   "barbell",
+  "dumbbell",
   "cable",
-  "kettlebell",
   "leverage machine",
-  "smith machine",
-  "resistance band",
-  "band",
-  "ez barbell",
-  "olympic barbell",
+  "kettlebell",
   "trap bar",
-  "medicine ball",
-  "stability ball",
-  "bosu ball",
-  "roller",
-  "wheel roller",
-  "rope",
-  "sled machine",
-  "hammer",
-  "tire",
-  "weighted",
-  "assisted",
-  "stationary bike",
-  "elliptical machine",
-  "stepmill machine",
-  "skierg machine",
-  "upper body ergometer",
+  "band",
+  "body weight",
 ];
 
 // Instructions are stored as "Step:1 Lie flat on your back…" — strip the
