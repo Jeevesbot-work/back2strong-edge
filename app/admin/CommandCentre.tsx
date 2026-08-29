@@ -41,6 +41,72 @@ function daysSinceOf(iso: string | null): number | null {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 }
 
+function greetingWord(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+interface BriefingItem {
+  key: string;
+  text: string;
+  href?: string;
+  tone: "urgent" | "warn" | "info";
+}
+
+// ── Daily Briefing ── the home-screen-first ranked to-do list. Reuses the
+// same data the panels below already compute (quiet clients, pending
+// approvals, high-priority tasks, low-readiness check-ins) but turns it into
+// one short, ordered, plain-English list so the day's priorities are visible
+// the instant this page opens — no scanning three columns required.
+function DailyBriefing({ items }: { items: BriefingItem[] }) {
+  const [open, setOpen] = useState(true);
+  const toneColor = (t: BriefingItem["tone"]) => (t === "urgent" ? "#F87171" : t === "warn" ? "#FBBF24" : B);
+
+  return (
+    <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, padding: "18px 20px", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: open && items.length > 0 ? 12 : 0 }}>
+        <p style={{ fontFamily: fraunces, fontSize: 19, color: TEXT, fontWeight: 400 }}>
+          {greetingWord()}, Nick.{" "}
+          {items.length === 0 ? (
+            <span style={{ color: "#34D399" }}>Nothing urgent — clear runway today.</span>
+          ) : (
+            <span style={{ color: MUTED, fontWeight: 400 }}>
+              {items.length} thing{items.length === 1 ? "" : "s"} need{items.length === 1 ? "s" : ""} you today.
+            </span>
+          )}
+        </p>
+        {items.length > 0 && (
+          <button onClick={() => setOpen((o) => !o)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: inter, fontSize: 10, color: MUTED, letterSpacing: "0.1em", textTransform: "uppercase", flexShrink: 0 }}>
+            {open ? "Hide" : "Show"}
+          </button>
+        )}
+      </div>
+      {open && items.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {items.map((item, i) => {
+            const row = (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 10, background: SURFACE2 }}>
+                <span style={{ fontFamily: inter, fontSize: 11, fontWeight: 700, color: toneColor(item.tone), width: 16, flexShrink: 0 }}>{i + 1}.</span>
+                <p style={{ flex: 1, fontFamily: inter, fontSize: 13, color: TEXT, lineHeight: 1.4 }}>{item.text}</p>
+                {item.href && (
+                  <span style={{ fontFamily: inter, fontSize: 11, color: B, fontWeight: 600, flexShrink: 0 }}>Open →</span>
+                )}
+              </div>
+            );
+            return item.href ? (
+              <Link key={item.key} href={item.href} style={{ textDecoration: "none" }}>{row}</Link>
+            ) : (
+              <div key={item.key}>{row}</div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Clock() {
   const [time, setTime] = useState("");
   const [date, setDate] = useState("");
@@ -121,6 +187,29 @@ export default function CommandCentre({ active, pending, recentCheckIns, recentM
   );
 
   const attentionCount = quietClients.length + lowReadiness.length;
+
+  // ── Briefing items ── same underlying data as the panels below, ranked:
+  // longest-quiet clients first, then pending sign-ups, then high-priority
+  // open tasks, then low-readiness flags. Capped so the list stays a glance,
+  // not another wall to read.
+  const highPriorityOpenTasks = tasks.filter((t) => !t.done && (t.priority ?? "MED") === "HIGH");
+  const briefingItems: BriefingItem[] = [
+    ...quietClients.map(({ p, d }) => ({
+      key: `q-${p.id}`,
+      href: `/admin/users/${p.id}`,
+      tone: "urgent" as const,
+      text: d === null ? `${p.full_name ?? p.email} hasn't checked in yet — reach out.` : `${p.full_name ?? p.email} has gone quiet for ${d} days — worth a nudge.`,
+    })),
+    ...(pending.length > 0
+      ? [{ key: "pending", tone: "warn" as const, text: `${pending.length} new sign-up${pending.length === 1 ? "" : "s"} waiting on approval.` }]
+      : []),
+    ...highPriorityOpenTasks.map((t) => ({ key: `task-${t.id}`, tone: "warn" as const, text: t.text })),
+    ...lowReadiness.slice(0, 3).map((c, i) => ({
+      key: `lr-${i}`,
+      tone: "info" as const,
+      text: `${c.profiles?.full_name ?? "A client"} logged low readiness — energy ${c.morning_energy}/5, sleep ${c.sleep_quality}/5.`,
+    })),
+  ].slice(0, 8);
 
   async function addTask() {
     if (!newTask.trim()) return;
@@ -357,6 +446,8 @@ export default function CommandCentre({ active, pending, recentCheckIns, recentM
 
         <Clock />
       </div>
+
+      <DailyBriefing items={briefingItems} />
 
       {narrow ? (
         <>
