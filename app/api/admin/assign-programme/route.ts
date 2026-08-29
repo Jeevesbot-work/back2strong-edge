@@ -4,6 +4,7 @@ import type { Programme } from "@/types";
 import { BARRY_PROGRAMME } from "@/lib/data/barry-programme";
 import { BARRY_PROGRAMME_BLOCK2, BARRY_BLOCK2_SESSIONS } from "@/lib/data/barry-programme-block2";
 import { ALEX_GALE_PROGRAMME } from "@/lib/data/alex-gale-programme";
+import { isAuthorisedAdmin } from "@/lib/admin/auth";
 
 const PROGRAMMES: Record<string, { programme: Programme; sessions?: unknown }> = {
   "barry-strong90-block1": { programme: BARRY_PROGRAMME, sessions: {} },
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user || !["n.adams3@icloud.com","nicosmada3@googlemail.com","nick@back2strong.online"].includes(user.email ?? "")) {
+  if (!(await isAuthorisedAdmin())) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
 

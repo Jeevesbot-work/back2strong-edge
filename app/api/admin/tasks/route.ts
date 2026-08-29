@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
-
-const ADMIN_EMAILS = ["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"];
+import { createAdminClient } from "@/lib/supabase/server";
+import { isAuthorisedAdmin } from "@/lib/admin/auth";
 
 async function checkAdmin() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return user && ADMIN_EMAILS.includes(user.email ?? "") ? user : null;
+  return (await isAuthorisedAdmin()) ? true : null;
 }
 
 export async function POST(req: NextRequest) {
