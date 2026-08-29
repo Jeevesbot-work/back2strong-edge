@@ -17,13 +17,26 @@ const ONE_YEAR = 60 * 60 * 24 * 365;
 export function middleware(req: NextRequest) {
   const { pathname, searchParams } = req.nextUrl;
   const accessKey = process.env.ADMIN_ACCESS_KEY;
+  const isRoot = pathname === "/";
 
   // If no key is configured, don't lock the founder out — just pass through.
   // (Set ADMIN_ACCESS_KEY in Vercel to turn the gate on.)
   if (!accessKey) return NextResponse.next();
 
   const cookieValue = req.cookies.get(COOKIE_NAME)?.value;
-  if (cookieValue === accessKey) return NextResponse.next();
+  if (cookieValue === accessKey) {
+    // Recognised coach device landing on the front door — send them straight to
+    // the Command Centre. Means a plain bookmark of the bare domain opens the
+    // dashboard rather than the client-facing app, so there's only ever one
+    // address to remember.
+    if (isRoot) {
+      const adminUrl = req.nextUrl.clone();
+      adminUrl.pathname = "/admin";
+      adminUrl.search = "";
+      return NextResponse.redirect(adminUrl);
+    }
+    return NextResponse.next();
+  }
 
   const keyParam = searchParams.get("key");
   if (keyParam === accessKey) {
@@ -31,6 +44,9 @@ export function middleware(req: NextRequest) {
     // so the secret never sits in browser history or gets shared by accident.
     const cleanUrl = req.nextUrl.clone();
     cleanUrl.searchParams.delete("key");
+    // Arriving at the bare domain with the key should land on the dashboard,
+    // not the client app front page.
+    if (isRoot) cleanUrl.pathname = "/admin";
     const res = NextResponse.redirect(cleanUrl);
     res.cookies.set(COOKIE_NAME, accessKey, {
       httpOnly: true,
@@ -42,11 +58,15 @@ export function middleware(req: NextRequest) {
     return res;
   }
 
+  // The bare domain must stay public — it's the clients' app. Only the admin
+  // paths get hidden.
+  if (isRoot) return NextResponse.next();
+
   // No valid cookie or key — pretend this doesn't exist rather than showing
   // a login page (a 404 gives a stranger nothing to probe).
   return new NextResponse("Not found", { status: 404 });
 }
 
 export const config = {
-  matcher: ["/admin", "/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/", "/admin", "/admin/:path*", "/api/admin/:path*"],
 };
