@@ -40,22 +40,41 @@ export function middleware(req: NextRequest) {
 
   const keyParam = searchParams.get("key");
   if (keyParam === accessKey) {
-    // Correct key in the URL — set the cookie and redirect to the clean path
-    // so the secret never sits in browser history or gets shared by accident.
+    const setCookie = (res: NextResponse) => {
+      res.cookies.set(COOKIE_NAME, accessKey, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        maxAge: ONE_YEAR,
+        path: "/",
+      });
+      return res;
+    };
+
+    // "stay=1" — serve the dashboard WITHOUT redirecting, so the key remains in
+    // the address bar. This exists for iOS "Add to Home Screen": a saved web app
+    // can keep its own cookie store separate from Safari's, so a cookie alone
+    // isn't dependable there. Keeping the key in the saved URL means the icon
+    // re-authorises itself on every launch and can never fall out of access.
+    if (searchParams.get("stay") === "1") {
+      if (isRoot) {
+        const target = req.nextUrl.clone();
+        target.pathname = "/admin";
+        // Rewrite, not redirect: the browser keeps showing the original URL
+        // (key intact) while being served the Command Centre.
+        return setCookie(NextResponse.rewrite(target));
+      }
+      return setCookie(NextResponse.next());
+    }
+
+    // Normal desktop path: set the cookie and redirect to the clean URL so the
+    // secret never lingers in browser history or gets shared by accident.
     const cleanUrl = req.nextUrl.clone();
     cleanUrl.searchParams.delete("key");
     // Arriving at the bare domain with the key should land on the dashboard,
     // not the client app front page.
     if (isRoot) cleanUrl.pathname = "/admin";
-    const res = NextResponse.redirect(cleanUrl);
-    res.cookies.set(COOKIE_NAME, accessKey, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      maxAge: ONE_YEAR,
-      path: "/",
-    });
-    return res;
+    return setCookie(NextResponse.redirect(cleanUrl));
   }
 
   // The bare domain must stay public — it's the clients' app. Only the admin
