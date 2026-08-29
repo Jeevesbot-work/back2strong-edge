@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { isAuthorisedAdmin } from "@/lib/admin/auth";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest) {
   try {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !ADMINS.includes(user.email ?? "")) {
+    if (!(await isAuthorisedAdmin())) {
       return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
     }
     if (!process.env.ANTHROPIC_API_KEY) {

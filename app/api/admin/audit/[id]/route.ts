@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { isAuthorisedAdmin } from "@/lib/admin/auth";
 
 const ADMINS = ["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"];
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !ADMINS.includes(user.email ?? "")) {
+  if (!(await isAuthorisedAdmin())) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
 

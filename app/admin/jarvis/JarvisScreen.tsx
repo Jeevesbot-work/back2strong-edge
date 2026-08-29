@@ -13,6 +13,19 @@ const inter = "Inter, sans-serif";
 
 type Phase = "idle" | "listening" | "thinking" | "speaking" | "error";
 
+// A drafted action awaiting Nick's explicit confirmation. Nothing here has
+// happened yet — this is the gate that stops a voice command reaching a
+// client without him reading it first.
+interface Proposal {
+  type: "client_message" | "task";
+  summary: string;
+  clientId?: string;
+  clientName?: string;
+  message?: string;
+  text?: string;
+  priority?: string;
+}
+
 // Minimal ambient typings for the Web Speech API — not in default TS DOM libs.
 interface SpeechRecognitionResultLike {
   [index: number]: { transcript: string };
@@ -38,6 +51,9 @@ export default function JarvisScreen() {
   const [level, setLevel] = useState(0); // 0..1 mic amplitude, drives the ring bars
   const [supportsVoice, setSupportsVoice] = useState(true);
   const [typedQuestion, setTypedQuestion] = useState("");
+  const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [editedMessage, setEditedMessage] = useState("");
+  const [actionState, setActionState] = useState<"idle" | "sending" | "done" | "failed">("idle");
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -105,6 +121,8 @@ export default function JarvisScreen() {
       stopMeter();
       setPhase("thinking");
       setAnswer("");
+      setProposal(null);
+      setActionState("idle");
       try {
         const res = await fetch("/api/admin/jarvis", {
           method: "POST",
@@ -114,6 +132,10 @@ export default function JarvisScreen() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Something went wrong");
         setAnswer(data.answer);
+        if (data.proposal) {
+          setProposal(data.proposal as Proposal);
+          setEditedMessage((data.proposal.message ?? data.proposal.text ?? "") as string);
+        }
         speak(data.answer);
       } catch (e) {
         setAnswer(e instanceof Error ? e.message : "Something went wrong.");
@@ -122,6 +144,33 @@ export default function JarvisScreen() {
     },
     [speak, stopMeter]
   );
+
+  // Fires the drafted action for real, against the existing admin endpoints.
+  // Only ever called from an explicit tap on Confirm.
+  const confirmProposal = useCallback(async () => {
+    if (!proposal) return;
+    setActionState("sending");
+    try {
+      let res: Response;
+      if (proposal.type === "client_message") {
+        res = await fetch("/api/admin/message-client", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: proposal.clientId, content: editedMessage }),
+        });
+      } else {
+        res = await fetch("/api/admin/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: editedMessage, priority: proposal.priority ?? "MED" }),
+        });
+      }
+      if (!res.ok) throw new Error("Request failed");
+      setActionState("done");
+    } catch {
+      setActionState("failed");
+    }
+  }, [proposal, editedMessage]);
 
   const startListening = useCallback(() => {
     const SpeechRecognitionCtor =
@@ -137,6 +186,8 @@ export default function JarvisScreen() {
     window.speechSynthesis?.cancel();
     setAnswer("");
     setTranscript("");
+    setProposal(null);
+    setActionState("idle");
     setPhase("listening");
     startMeter();
 
@@ -164,6 +215,15 @@ export default function JarvisScreen() {
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
+  }, []);
+
+  // Detect voice support on load rather than on first tap, so an unsupported
+  // browser shows the typed fallback straight away instead of after a dead press.
+  useEffect(() => {
+    const ctor =
+      (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition ??
+      (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
+    if (!ctor) setSupportsVoice(false);
   }, []);
 
   useEffect(() => () => {
@@ -250,6 +310,47 @@ export default function JarvisScreen() {
             <p style={{ fontFamily: fraunces, fontSize: 20, color: TEXT, lineHeight: 1.5, fontWeight: 400 }}>{answer}</p>
           )}
         </div>
+
+        {/* ── Confirm gate ── nothing reaches a client until this is tapped. */}
+        {proposal && (
+          <div style={{ maxWidth: 560, width: "100%", background: "rgba(255,255,255,0.035)", border: `1px solid ${GOLD}44`, borderRadius: 16, padding: "18px 20px", textAlign: "left" }}>
+            <p style={{ fontFamily: inter, fontSize: 10, color: GOLD, letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 10 }}>
+              {actionState === "done" ? "Sent" : "Draft — not sent yet"}
+            </p>
+            <p style={{ fontFamily: inter, fontSize: 12, color: MUTED, marginBottom: 12, lineHeight: 1.5 }}>{proposal.summary}</p>
+
+            <textarea
+              value={editedMessage}
+              onChange={(e) => setEditedMessage(e.target.value)}
+              readOnly={actionState === "done" || actionState === "sending"}
+              rows={4}
+              style={{ width: "100%", boxSizing: "border-box", background: "rgba(0,0,0,0.35)", border: `1px solid rgba(255,255,255,0.1)`, borderRadius: 10, padding: "12px 14px", fontFamily: inter, fontSize: 14, color: TEXT, lineHeight: 1.55, outline: "none", resize: "vertical" }}
+            />
+
+            {actionState === "done" ? (
+              <p style={{ fontFamily: inter, fontSize: 13, color: "#34D399", marginTop: 12 }}>Done.</p>
+            ) : (
+              <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+                <button
+                  onClick={confirmProposal}
+                  disabled={actionState === "sending" || !editedMessage.trim()}
+                  style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: editedMessage.trim() ? GOLD : "rgba(255,255,255,0.08)", color: editedMessage.trim() ? BG : MUTED, fontFamily: inter, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", cursor: actionState === "sending" ? "default" : "pointer" }}
+                >
+                  {actionState === "sending" ? "SENDING…" : proposal.type === "client_message" ? "SEND IT" : "ADD IT"}
+                </button>
+                <button
+                  onClick={() => { setProposal(null); setActionState("idle"); }}
+                  style={{ padding: "10px 18px", borderRadius: 10, border: `1px solid rgba(255,255,255,0.14)`, background: "none", color: MUTED, fontFamily: inter, fontSize: 12, fontWeight: 600, letterSpacing: "0.06em", cursor: "pointer" }}
+                >
+                  DISCARD
+                </button>
+                {actionState === "failed" && (
+                  <span style={{ fontFamily: inter, fontSize: 12, color: "#F87171" }}>Didn&apos;t go through — try again.</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {!supportsVoice && (
           <div style={{ display: "flex", gap: 8, maxWidth: 480, width: "100%" }}>

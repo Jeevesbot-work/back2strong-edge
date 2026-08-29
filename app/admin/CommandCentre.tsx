@@ -16,8 +16,17 @@ const inter = "Inter, sans-serif";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
+interface EarlyWarning {
+  userId: string;
+  name: string;
+  kind: string;
+  message: string;
+  severity: 1 | 2 | 3;
+}
+
 interface Props {
   active: Row[];
+  earlyWarnings?: EarlyWarning[];
   pending: Row[];
   recentCheckIns: Row[];
   recentMessages: Row[];
@@ -154,7 +163,7 @@ function useIsNarrow(): boolean {
   return narrow;
 }
 
-export default function CommandCentre({ active, pending, recentCheckIns, recentMessages, recentMealLogs, recentTrainingSessions, tasks: initialTasks, coachNotes }: Props) {
+export default function CommandCentre({ active, earlyWarnings = [], pending, recentCheckIns, recentMessages, recentMealLogs, recentTrainingSessions, tasks: initialTasks, coachNotes }: Props) {
   const [tasks, setTasks] = useState<Row[]>(initialTasks);
   const [newTask, setNewTask] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState<"HIGH" | "MED" | "LOW">("MED");
@@ -199,6 +208,15 @@ export default function CommandCentre({ active, pending, recentCheckIns, recentM
       href: `/admin/users/${p.id}`,
       tone: "urgent" as const,
       text: d === null ? `${p.full_name ?? p.email} hasn't checked in yet — reach out.` : `${p.full_name ?? p.email} has gone quiet for ${d} days — worth a nudge.`,
+    })),
+    // Early-warning signals sit directly under the already-quiet clients:
+    // these people are still engaged, so reaching them now is cheaper than a
+    // recovery conversation later.
+    ...earlyWarnings.map((w) => ({
+      key: `ew-${w.userId}-${w.kind}`,
+      href: `/admin/users/${w.userId}`,
+      tone: (w.severity >= 3 ? "urgent" : w.severity === 2 ? "warn" : "info") as "urgent" | "warn" | "info",
+      text: w.message,
     })),
     ...(pending.length > 0
       ? [{ key: "pending", tone: "warn" as const, text: `${pending.length} new sign-up${pending.length === 1 ? "" : "s"} waiting on approval.` }]
