@@ -444,7 +444,13 @@ export default function CommandCentre({ active, pending, recentCheckIns, recentM
           </div>
         )}
 
-        <Clock />
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <Link href="/admin/jarvis" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 7, padding: "6px 12px", borderRadius: 16, border: `1px solid rgba(200,150,90,0.35)`, background: "rgba(200,150,90,0.08)" }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: B, boxShadow: `0 0 6px ${B}` }} />
+            <span style={{ fontFamily: inter, fontSize: 10, fontWeight: 700, color: B, letterSpacing: "0.1em" }}>JARVIS</span>
+          </Link>
+          <Clock />
+        </div>
       </div>
 
       <DailyBriefing items={briefingItems} />
