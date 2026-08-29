@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getMovement } from "@/lib/data/movements";
+import { createClient } from "@supabase/supabase-js";
+import { getMovement, type Movement } from "@/lib/data/movements";
 
 const B = "#C8A86E";
 const SURFACE = "#171B21";
@@ -9,12 +10,73 @@ const MUTED = "#9BA3AF";
 const TEXT = "#F2F1ED";
 const inter = "Inter, sans-serif";
 const fraunces = "Fraunces, Georgia, serif";
+const GIF_TILE = "#EDE7D8";
 
 const label: React.CSSProperties = { fontFamily: inter, fontSize: 9, color: MUTED, textTransform: "uppercase", letterSpacing: "0.2em", marginBottom: 10 };
 
-export default function MovementPage({ params }: { params: { slug: string } }) {
+// Words too generic to search on alone — skipping these keeps the fallback
+// lookup from matching something unrelated just because it shares a common
+// qualifier (e.g. "seated", "single-leg").
+const STOP_WORDS = new Set([
+  "single-arm", "single-leg", "single", "arm", "leg", "seated", "standing",
+  "lower", "bench", "the", "a", "an", "or", "one", "side", "supported",
+]);
+
+// The coached Moves cards don't all have real photos yet, but the Exercise
+// Library (55 curated rows from public.exercises) does. Rather than leave a
+// card saying "demo coming soon" when a real photo already exists two taps
+// away, this looks the movement up in that library and borrows its image —
+// so there's one real answer to "what does this look like", not two
+// half-finished ones.
+async function findLibraryImage(m: Movement): Promise<string | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+
+  const supabase = createClient(url, key);
+
+  // Try each alias phrase first — these are hand-written and specific
+  // (e.g. "incline chest press"), so they're the most trustworthy match.
+  const phrases = [...m.aliases, m.name.replace(/\s*\([^)]*\)\s*/g, "")];
+
+  for (const phrase of phrases) {
+    const cleaned = phrase.trim().toLowerCase();
+    if (!cleaned) continue;
+    const { data } = await supabase
+      .from("exercises")
+      .select("gif_url")
+      .eq("in_library", true)
+      .ilike("name", `%${cleaned}%`)
+      .limit(1);
+    if (data && data.length > 0) return data[0].gif_url as string;
+  }
+
+  // Fallback: the single most distinctive word left after stripping
+  // qualifiers — catches cases like "Box Squat" -> "squat" when the exact
+  // phrase isn't in the curated set.
+  const words = m.name
+    .toLowerCase()
+    .replace(/[()]/g, "")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !STOP_WORDS.has(w));
+  for (const word of words) {
+    const { data } = await supabase
+      .from("exercises")
+      .select("gif_url")
+      .eq("in_library", true)
+      .ilike("name", `%${word}%`)
+      .limit(1);
+    if (data && data.length > 0) return data[0].gif_url as string;
+  }
+
+  return null;
+}
+
+export default async function MovementPage({ params }: { params: { slug: string } }) {
   const m = getMovement(params.slug);
   if (!m) notFound();
+
+  const libraryImage = m.images.length === 0 ? await findLibraryImage(m) : null;
 
   return (
     <div style={{ maxWidth: 512, margin: "0 auto", padding: "0 16px 40px" }}>
@@ -44,6 +106,14 @@ export default function MovementPage({ params }: { params: { slug: string } }) {
               <p style={{ fontFamily: inter, fontSize: 9, color: MUTED, textAlign: "center", marginTop: 6, lineHeight: 1.3 }}>{img.caption}</p>
             </div>
           ))}
+        </div>
+      ) : libraryImage ? (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ borderRadius: 16, overflow: "hidden", border: `1px solid ${BORDER}`, background: GIF_TILE }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={libraryImage} alt={m.name} style={{ width: "100%", display: "block" }} />
+          </div>
+          <p style={{ fontFamily: inter, fontSize: 9, color: MUTED, textAlign: "center", marginTop: 6, lineHeight: 1.3 }}>From the Exercise Library — the coaching below is Nick&apos;s, for this exact progression.</p>
         </div>
       ) : (
         <div style={{ marginBottom: 24, borderRadius: 16, border: `1px dashed ${BORDER}`, background: SURFACE, padding: "28px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
