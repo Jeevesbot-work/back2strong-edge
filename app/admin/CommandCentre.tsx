@@ -22,6 +22,7 @@ interface Props {
   recentCheckIns: Row[];
   recentMessages: Row[];
   recentMealLogs: Row[];
+  recentTrainingSessions: Row[];
   tasks: Row[];
   coachNotes: Row[];
 }
@@ -87,7 +88,7 @@ function useIsNarrow(): boolean {
   return narrow;
 }
 
-export default function CommandCentre({ active, pending, recentCheckIns, recentMessages, recentMealLogs, tasks: initialTasks, coachNotes }: Props) {
+export default function CommandCentre({ active, pending, recentCheckIns, recentMessages, recentMealLogs, recentTrainingSessions, tasks: initialTasks, coachNotes }: Props) {
   const [tasks, setTasks] = useState<Row[]>(initialTasks);
   const [newTask, setNewTask] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState<"HIGH" | "MED" | "LOW">("MED");
@@ -99,16 +100,19 @@ export default function CommandCentre({ active, pending, recentCheckIns, recentM
     (p) => !["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"].includes(p.email)
   );
 
-  // Live client interactions — check-ins, meals, messages, newest first.
+  // Live client interactions — check-ins, training, meals, messages, newest first.
   const activityItems = [
-    ...recentCheckIns.map((c) => ({ type: "checkin" as const, name: c.profiles?.full_name ?? "Member", text: `Energy ${c.morning_energy}/5 · Sleep ${c.sleep_quality}/5${c.notes ? ` · "${c.notes}"` : ""}`, time: c.created_at })),
+    ...recentCheckIns.map((c) => ({ type: "checkin" as const, name: c.profiles?.full_name ?? "Member", text: `Energy ${c.morning_energy}/5 · Sleep ${c.sleep_quality}/5${c.weight_kg ? ` · ${c.weight_kg}kg` : ""}${c.notes ? ` · "${c.notes}"` : ""}`, time: c.created_at })),
+    ...recentTrainingSessions.map((s) => ({ type: "training" as const, name: s.profiles?.full_name ?? "Member", text: `${s.session_type ?? "Session"}${s.duration_minutes ? ` · ${s.duration_minutes} min` : ""}`, time: s.completed_at ?? s.created_at })),
     ...recentMessages.map((m) => ({ type: "message" as const, name: m.profiles?.full_name ?? "Member", text: m.content?.slice(0, 160), time: m.created_at })),
     ...recentMealLogs.map((l) => ({ type: "meal" as const, name: l.profiles?.full_name ?? "Member", text: `${l.meal_name} · ${l.protein_g}g protein · ${l.calories} kcal`, time: l.created_at })),
-  ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 30);
+  ].filter((i) => !!i.time).sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 30);
 
-  // ── Needs attention ── clients gone quiet, plus low-readiness check-ins.
+  // ── Needs attention ── clients gone quiet across ALL activity (check-ins,
+  // training, meals) — not check-ins alone, so a client training and eating
+  // well but skipping the morning check-in doesn't get falsely flagged.
   const quietClients = clientMembers
-    .map((p) => ({ p, d: daysSinceOf(p.last_check_in) }))
+    .map((p) => ({ p, d: daysSinceOf(p.last_seen ?? p.last_check_in) }))
     .filter(({ d }) => d === null || d >= 3)
     .sort((a, b) => (b.d ?? 999) - (a.d ?? 999));
 
@@ -154,9 +158,9 @@ export default function CommandCentre({ active, pending, recentCheckIns, recentM
       <p style={{ ...sectionHeader, fontSize: 10 }}>Active Members</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 18 }}>
         {clientMembers.map((p) => {
-          const d = daysSinceOf(p.last_check_in);
+          const d = daysSinceOf(p.last_seen ?? p.last_check_in);
           const alertColor = d === null ? MUTED : d >= 3 ? "#F87171" : d >= 2 ? "#FBBF24" : "#34D399";
-          const alertLabel = d === null ? "No check-ins" : d === 0 ? "Checked in today" : `Last check-in ${d}d ago`;
+          const alertLabel = d === null ? "No activity yet" : d === 0 ? "Active today" : `Quiet ${d}d`;
           const stale = d !== null && d >= 3;
           return (
             <Link key={p.id} href={`/admin/users/${p.id}`} style={{ textDecoration: "none" }}>
@@ -247,10 +251,10 @@ export default function CommandCentre({ active, pending, recentCheckIns, recentM
               <div key={i} style={{ background: SURFACE2, borderRadius: 14, padding: "14px 16px", border: `1px solid ${BORDER}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, alignItems: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: item.type === "checkin" ? "#34D399" : item.type === "meal" ? B : "#60A5FA", flexShrink: 0 }} />
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: item.type === "checkin" ? "#34D399" : item.type === "meal" ? B : item.type === "training" ? "#60A5FA" : "#818CF8", flexShrink: 0 }} />
                     <p style={{ fontFamily: inter, fontSize: 14, fontWeight: 600, color: TEXT }}>{item.name}</p>
                     <span style={{ fontFamily: inter, fontSize: 9, color: MUTED, textTransform: "uppercase", letterSpacing: "0.08em", background: "rgba(255,255,255,0.05)", padding: "2px 7px", borderRadius: 4 }}>
-                      {item.type === "checkin" ? "Check-in" : item.type === "meal" ? "Meal" : "Message"}
+                      {item.type === "checkin" ? "Check-in" : item.type === "meal" ? "Meal" : item.type === "training" ? "Training" : "Message"}
                     </span>
                   </div>
                   <p style={{ fontFamily: inter, fontSize: 11, color: MUTED, flexShrink: 0 }}>{timeAgo(item.time)}</p>
