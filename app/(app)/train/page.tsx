@@ -4,6 +4,7 @@ import { BARRY_PROGRAMME } from "@/lib/data/barry-programme";
 import SessionCards from "@/components/SessionCards";
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { RevealGroup } from "@/components/Reveal";
 
 const DAY_TO_JS: Record<string, number> = {
   Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
@@ -123,9 +124,9 @@ export default async function TrainPage() {
         </Link>
       </div>
 
+      <RevealGroup>
       {/* ── Current week card ── */}
       <div
-        className="anim-0"
         style={{ background: "#171B21", borderRadius: 20, border: "1px solid rgba(200,150,90,0.2)", padding: "20px", marginBottom: 14 }}
       >
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
@@ -160,7 +161,7 @@ export default async function TrainPage() {
       </div>
 
       {/* ── Weekly schedule strip ── */}
-      <div className="anim-1" style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 6 }}>
           {prog.weeklySchedule.map(({ day, type }) => {
             const jsDay = DAY_TO_JS[day];
@@ -187,7 +188,7 @@ export default async function TrainPage() {
       </div>
 
       {/* ── 4 Session cards — client component merges Supabase + localStorage ── */}
-      <div className="anim-2" style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 24 }}>
         <SessionCards
           weeklySchedule={prog.weeklySchedule}
           sessions={sessions}
@@ -198,7 +199,7 @@ export default async function TrainPage() {
       </div>
 
       {/* ── Cardio ── */}
-      <div className="anim-3" style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 24 }}>
         <p style={{ fontSize: 9, color: "#9BA3AF", textTransform: "uppercase", letterSpacing: "0.2em", fontFamily: "Inter, sans-serif", marginBottom: 12 }}>
           Cardio
         </p>
@@ -376,6 +377,7 @@ export default async function TrainPage() {
           ))}
         </div>
       )}
+      </RevealGroup>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { RevealGroup } from "@/components/Reveal";
 import type { ProgrammeScheduleDay, ProgrammeWeek, SessionData } from "@/types";
 
 const DAY_TO_JS: Record<string, number> = {
@@ -56,7 +57,7 @@ export default function SessionCards({ weeklySchedule, sessions, supabaseDoneTyp
   const liftDays = weeklySchedule.filter((d) => d.type === "lift" && (d.fromWeek ?? 1) <= currentWeek);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <RevealGroup style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {liftDays.map(({ day, label, sessionKey }) => {
         if (!sessionKey) return null;
         const session  = sessions[sessionKey];
@@ -113,6 +114,6 @@ export default function SessionCards({ weeklySchedule, sessions, supabaseDoneTyp
           </Link>
         );
       })}
-    </div>
+    </RevealGroup>
   );
 }

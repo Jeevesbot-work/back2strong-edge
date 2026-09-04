@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { getLesson } from "@/lib/data/lessons";
 import { getClientProgramme, blockSessionKeys } from "@/lib/data/programme-loader";
+import { RevealGroup } from "@/components/Reveal";
 import WalkLogger from "@/components/WalkLogger";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -175,11 +176,11 @@ export default async function HomePage() {
         </div>
       </div>
 
-      <div className="px-5 space-y-3 pb-10 mt-5">
+      <RevealGroup className="px-5 space-y-3 pb-10 mt-5">
 
         {/* Welcome card — shown on first day before any sessions */}
         {currentDay === 1 && sessionsThisWeek.length === 0 && (
-          <div className="anim-0" style={{ background: "#171B21", borderRadius: 20, border: "1px solid rgba(200,150,90,0.3)", padding: "20px", position: "relative", overflow: "hidden" }}>
+          <div style={{ background: "#171B21", borderRadius: 20, border: "1px solid rgba(200,150,90,0.3)", padding: "20px", position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 2.5, background: "#C8965A", borderRadius: "20px 0 0 20px" }} />
             <div style={{ paddingLeft: 14 }}>
               <p style={{ fontSize: 9, color: "#C8965A", textTransform: "uppercase", letterSpacing: "0.2em", fontFamily: "Inter, sans-serif", marginBottom: 10 }}>
@@ -202,7 +203,7 @@ export default async function HomePage() {
         )}
 
         {/* Readiness + coach note row */}
-        <div className="anim-0" style={{ display: "flex", gap: 12 }}>
+        <div style={{ display: "flex", gap: 12 }}>
 
           {/* Readiness card */}
           <Link href="/checkin" className="pressable" style={{ flex: 1, textDecoration: "none" }}>
@@ -253,12 +254,12 @@ export default async function HomePage() {
         </div>
 
         {/* Quick walk logger */}
-        <div className="anim-1">
+        <div>
           <WalkLogger initialMinutes={walkMinutesToday} />
         </div>
 
         {/* Today's training — full-bleed photo card */}
-        <div className="anim-1">
+        <div>
           {!weekDone ? (
             <Link href={sessionHref} className="block pressable">
               <div style={{ position: "relative", overflow: "hidden", borderRadius: 20, minHeight: 200 }}>
@@ -301,7 +302,7 @@ export default async function HomePage() {
         </div>
 
         {/* Today's fuel — protein-first snapshot, links to the Fuel tab */}
-        <div className="anim-2">
+        <div>
           <Link href="/nutrition" className="block pressable">
             <div style={{ background: "#171B21", borderRadius: 20, border: "1px solid #252A32", padding: "18px 20px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -343,7 +344,7 @@ export default async function HomePage() {
 
         {/* Today's mind lesson */}
         {todayLesson && (
-          <div className="anim-2">
+          <div>
             <Link href={`/mind/${lessonDay}`} className="block pressable">
               <div style={{ background: "#171B21", borderRadius: 20, border: "1px solid #252A32", padding: "20px", position: "relative", overflow: "hidden" }}>
                 <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 2.5, background: "rgba(200,150,90,0.4)", borderRadius: "20px 0 0 20px" }} />
@@ -370,7 +371,7 @@ export default async function HomePage() {
         )}
 
         {/* Daily check-in */}
-        <div className="anim-3">
+        <div>
           <Link href="/checkin" className="block pressable">
             <div style={{
               background: todayCheckin ? "rgba(52,211,153,0.06)" : "#171B21",
@@ -404,7 +405,7 @@ export default async function HomePage() {
           </Link>
         </div>
 
-      </div>
+      </RevealGroup>
     </div>
   );
 }
