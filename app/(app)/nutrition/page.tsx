@@ -835,6 +835,10 @@ function RecipeCard({
       className="w-full rounded-2xl p-4 border border-white/[0.06] flex items-center gap-4 text-left"
       style={{ backgroundColor: RECIPE_INK }}
     >
+      {recipe.image_url && (
+      <button onClick={() => onOpen(recipe)} className="flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden bg-black/20">
+      <img src={recipe.image_url} alt="" className="w-full h-full object-cover" loading="lazy" /></button>
+      )}
       <button onClick={() => onOpen(recipe)} className="flex-1 min-w-0 text-left">
         <p
           className="font-condensed font-bold text-[10px] uppercase tracking-[0.22em] mb-1.5"
@@ -925,6 +929,10 @@ function RecipeDetail({
           </svg>
         </button>
       </div>
+      {recipe.image_url && (
+      <div className="w-full aspect-[4/3] rounded-2xl overflow-hidden mb-5 bg-black/20">
+      <img src={recipe.image_url} alt="" className="w-full h-full object-cover" /></div>
+      )}
 
       <h1 className="font-display font-semibold text-4xl leading-tight mb-3" style={{ color: RECIPE_CREAM }}>{recipe.title}</h1>
       {recipe.description && <p className="text-edge-secondary text-sm leading-relaxed mb-6">{recipe.description}</p>}
