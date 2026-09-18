@@ -8,6 +8,14 @@ interface UserContext {
   lessonProgress: LessonCompletion[];
   adminNotes: AdminNote[];
   messageCount: number;
+  /** Last 7 days of meal logs — so Edge can actually talk about food. */
+  recentFuel?: Array<{ date: string; protein_g: number | null; calories: number | null; meal_name: string | null }>;
+  proteinTarget?: number | null;
+  calorieTarget?: number | null;
+  /** Total walking minutes in the last 7 days. */
+  walkMinutesWeek?: number;
+  /** Meals planned in the Fuel Week view for this week, e.g. "Tuesday dinner: Chicken tray bake". */
+  plannedMeals?: string[];
 }
 
 export function buildSystemPrompt(ctx: UserContext): string {
@@ -34,6 +42,22 @@ export function buildSystemPrompt(ctx: UserContext): string {
   const currentDay = programme?.current_day ?? 1;
   const currentWeek = programme?.current_week ?? 1;
   const lessonsCompleted = lessonProgress.length;
+
+  // Fuel context — grouped by day so Edge sees the pattern, not 20 raw rows.
+  const fuel = ctx.recentFuel ?? [];
+  const byDay = new Map<string, { protein: number; calories: number; meals: number }>();
+  for (const l of fuel) {
+    const d = byDay.get(l.date) ?? { protein: 0, calories: 0, meals: 0 };
+    d.protein += Number(l.protein_g) || 0; d.calories += Number(l.calories) || 0; d.meals += 1;
+    byDay.set(l.date, d);
+  }
+  const fuelDays = Array.from(byDay.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  const pTarget = ctx.proteinTarget ?? 160;
+  const fuelContext = fuelDays.length
+    ? `\n\nFUEL — last 7 days of what he actually logged (target ${pTarget}g protein${ctx.calorieTarget ? `, ${ctx.calorieTarget} kcal` : ""} per day):\n${fuelDays.map(([d, v]) => `- ${d}: ${Math.round(v.protein)}g protein, ${Math.round(v.calories)} kcal, ${v.meals} meal${v.meals === 1 ? "" : "s"} logged${v.protein >= pTarget ? " ✓ hit target" : ""}`).join("\n")}\nDays with no logs are days he didn't track — ask, don't assume he ate nothing.`
+    : `\n\nFUEL: no meals logged in the last 7 days. If food comes up, nudge him to log — even one photo a day gives you something to work with.`;
+  const walkContext = ctx.walkMinutesWeek != null ? `\nWALKING: ${ctx.walkMinutesWeek} minutes in the last 7 days.` : "";
+  const planContext = ctx.plannedMeals?.length ? `\nMEALS HE HAS PLANNED THIS WEEK (Fuel > Week): ${ctx.plannedMeals.join("; ")}. Reference these when relevant — he can tell you to change them and you should point him to the Week tab's "Ask Edge" box to rebuild.` : "";
 
   const adminContext = adminNotes.length
     ? `\n\nNotes from Nick about this user:\n${adminNotes.map((n) => `- ${n.note}`).join("\n")}`
@@ -133,7 +157,7 @@ Average energy (last 7 days): ${avgEnergy}/5
 Average sleep quality (last 7 days): ${avgSleep}/5
 Average stress level (last 7 days): ${avgStress}/5
 STRONG System lessons completed: ${lessonsCompleted}
-${adminContext}${upgradePrompt}`;
+${fuelContext}${walkContext}${planContext}${adminContext}${upgradePrompt}`;
 }
 
 export function buildDailyMessage(ctx: UserContext): string {
