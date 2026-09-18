@@ -167,14 +167,17 @@ export default function WeekPlanner({ recipes, loading, onOpenRecipe, proteinTar
           <button
             onClick={() => void askEdge()}
             disabled={building || !instruction.trim()}
-            className="px-4 py-2.5 rounded-xl font-condensed font-bold text-xs uppercase tracking-widest text-edge-bg disabled:opacity-40"
+            className="px-4 py-2.5 rounded-xl font-condensed font-bold text-xs uppercase tracking-widest text-edge-bg disabled:opacity-40 flex items-center gap-2"
             style={{ backgroundColor: BRASS }}
           >
-            {building ? "…" : "Build"}
+            {building && (
+            <span className="w-3 h-3 rounded-full border-2 border-edge-bg/30 border-t-edge-bg animate-spin" aria-hidden="true" />
+            )}
+            {building ? "Building…" : "Build"}          
           </button>
         </div>
-        {note && <p className="text-white/80 text-xs leading-relaxed mt-2.5">{note}</p>}
-        {error && <p className="text-edge-red text-xs mt-2.5">{error}</p>}
+        {!building && note && <p className="text-white/80 text-xs leading-relaxed mt-2.5">{note}</p>}
+        {!building && error && <p className="text-edge-red text-xs mt-2.5">{error}</p>}
       </div>
 
       {/* Quick actions */}
