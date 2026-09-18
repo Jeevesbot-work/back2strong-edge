@@ -1,6 +1,7 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import AuditCard from "@/components/admin/AuditCard";
 
 export const dynamic = "force-dynamic";
 
@@ -60,24 +61,7 @@ export default async function AuditInboxPage() {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {rows.map((r) => {
-          const onboarded = r.status === "onboarded";
-          const goal = (r.data?.ninety_day_goal as string) || (r.data?.age_limitations as string) || "";
-          const committed = r.data?.committed as string | undefined;
-          return (
-            <div key={r.id} style={{ background: S.surface, border: `1px solid ${onboarded ? S.border : "rgba(200,150,90,0.3)"}`, borderRadius: 16, padding: 18 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-                <p style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 19, color: S.text }}>{r.full_name || "Unknown"}</p>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: onboarded ? S.green : S.bronze }}>{onboarded ? "Onboarded ✓" : "New"}</span>
-              </div>
-              <p style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: S.sub, marginBottom: 4 }}>{r.email || "no email"} · {new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}{committed ? ` · committed: ${committed}` : ""}</p>
-              {goal && <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: S.text, lineHeight: 1.5, margin: "8px 0 12px" }}>“{goal.length > 120 ? goal.slice(0, 120) + "…" : goal}”</p>}
-              {!onboarded && (
-                <Link href={`/admin/new?audit=${r.id}`} style={{ display: "inline-block", background: S.bronze, color: "#0E1014", borderRadius: 10, padding: "10px 18px", textDecoration: "none", fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>Build programme →</Link>
-              )}
-            </div>
-          );
-        })}
+        {rows.map((r) => <AuditCard key={r.id} r={r} />)}
       </div>
     </div>
   );
