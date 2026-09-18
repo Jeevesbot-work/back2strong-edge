@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { full_name, age, goal, days_per_week, injuries, equipment, experience, dietary, medical, tweak, previous, auditContext } = body;
+    const { full_name, age, goal, days_per_week, injuries, equipment, experience, dietary, medical, tweak, previous, auditContext, healthContext } = body;
 
     let userMessage =
       `Generate a Weeks 1 & 2 starter programme (lengthWeeks: 2) for this client.\n\n` +
@@ -118,6 +118,21 @@ export async function POST(req: NextRequest) {
         `\nThis client completed a full Strong90 audit. Use it to make the programme genuinely personal — ` +
         `pay attention to sleep, energy, stress, alcohol, recovery and what they said about the next decade. ` +
         `Full audit answers (JSON):\n${JSON.stringify(auditContext)}\n`;
+    }
+
+    if (healthContext && typeof healthContext === "object") {
+      const h = healthContext as Record<string, string>;
+      userMessage += `\nHealth intelligence is available for this client — treat it as clinically significant, not background colour:\n`;
+      if (h.blood_notes || h.blood_flags) {
+        userMessage += `Blood panel (${h.blood_provider || "provider unstated"}, ${h.blood_date || "date unstated"}): ${h.blood_notes || "no notes"}. Flagged: ${h.blood_flags || "none"}.\n`;
+      }
+      if (h.dna_notes) {
+        userMessage += `DNA (${h.dna_provider || "provider unstated"}, ${h.dna_date || "date unstated"}): ${h.dna_notes}.\n`;
+      }
+      if (h.doctor_summary || h.doctor_flags) {
+        userMessage += `Doctor debrief (${h.doctor_name || "doctor unstated"}, ${h.doctor_date || "date unstated"}): ${h.doctor_summary || "no summary"}. Flags: ${h.doctor_flags || "none"}.\n`;
+      }
+      userMessage += `Reflect anything clinically relevant in "considerations" (be specific, e.g. name the flagged marker), and in nutrition.medicalLabel/medicalNote if it changes food or training advice. Never contradict or second-guess the doctor's own recommendation — defer to it.\n`;
     }
 
     userMessage += `\nReturn the JSON now.`;
