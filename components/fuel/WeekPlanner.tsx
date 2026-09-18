@@ -222,7 +222,11 @@ export default function WeekPlanner({ recipes, loading, onOpenRecipe, proteinTar
             return (
               <div key={slot} className="rounded-2xl border border-white/[0.08] overflow-hidden" style={{ backgroundColor: INK }}>
                 <div className="flex items-stretch">
-                  <button onClick={() => (r ? onOpenRecipe(r) : setPicker({ day, slot }))} className="flex-1 min-w-0 text-left px-4 py-3">
+                  {r?.image_url && (
+                <button onClick={() => onOpenRecipe(r)} className="flex-shrink-0 w-[72px] overflow-hidden">
+                <img src={r.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                </button>
+                )}<button onClick={() => (r ? onOpenRecipe(r) : setPicker({ day, slot }))} className="flex-1 min-w-0 text-left px-4 py-3">
                     <p className="font-condensed font-bold text-[10px] uppercase tracking-[0.18em]" style={{ color: BRASS }}>{CATEGORY_LABEL[slot]}</p>
                     {r ? (
                       <>
