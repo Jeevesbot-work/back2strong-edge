@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { email, full_name, age, goal, training_state, injuries, days_per_week, programme, sessions, auditId } = body;
+  const { email, full_name, age, goal, training_state, injuries, days_per_week, programme, sessions, auditId, health } = body;
 
   if (!email || !full_name) {
     return NextResponse.json({ error: "Email and name are required" }, { status: 400 });
@@ -86,6 +86,49 @@ export async function POST(req: NextRequest) {
   // Mark the source audit as onboarded so it drops out of the "new" inbox.
   if (auditId) {
     await admin.from("coach_notes").update({ tag: "audit:onboarded" }).eq("id", auditId);
+  }
+
+  // Health intelligence (blood / DNA / doctor debrief) — best-effort, never blocks
+  // onboarding. Populates blood_panels / dna_profiles / doctor_reports for this
+  // client the moment their account exists, ready for programme_briefs later.
+  if (health && typeof health === "object") {
+    const h = health as Record<string, string>;
+    try {
+      let bloodPanelId: string | null = null;
+      if (h.blood_notes || h.blood_flags || h.blood_date) {
+        const { data: bp, error: bpErr } = await admin.from("blood_panels").insert({
+          user_id: userId,
+          test_date: h.blood_date || null,
+          provider: h.blood_provider || "Polaris Health",
+          markers: { notes: h.blood_notes || "" },
+          flagged_markers: h.blood_flags ? h.blood_flags.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        }).select("id").single();
+        if (bpErr) console.error("[onboard] blood_panels insert failed:", bpErr.message);
+        bloodPanelId = bp?.id ?? null;
+      }
+      if (h.dna_notes || h.dna_date) {
+        const { error: dnaErr } = await admin.from("dna_profiles").insert({
+          user_id: userId,
+          test_date: h.dna_date || null,
+          provider: h.dna_provider || "MUHDO",
+          traits: { notes: h.dna_notes || "" },
+        });
+        if (dnaErr) console.error("[onboard] dna_profiles insert failed:", dnaErr.message);
+      }
+      if (h.doctor_summary || h.doctor_flags || h.doctor_date) {
+        const { error: drErr } = await admin.from("doctor_reports").insert({
+          user_id: userId,
+          blood_panel_id: bloodPanelId,
+          debrief_date: h.doctor_date || null,
+          doctor_name: h.doctor_name || null,
+          summary: h.doctor_summary || null,
+          key_flags: h.doctor_flags ? h.doctor_flags.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        });
+        if (drErr) console.error("[onboard] doctor_reports insert failed:", drErr.message);
+      }
+    } catch (e) {
+      console.error("[onboard] health intelligence save exception:", e);
+    }
   }
 
   // Best-effort email. Never blocks onboarding — the link is returned regardless.
