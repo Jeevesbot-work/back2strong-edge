@@ -9,7 +9,7 @@ export default async function AdminPage() {
   // TEMP: single-user open access — set back to true to re-gate the Command
   // Centre behind admin login. NOTE: while false, anyone with the URL can read
   // all client data. Add real gatekeeping before sharing the link.
-  const REQUIRE_ADMIN_LOGIN = false;
+  const REQUIRE_ADMIN_LOGIN = true;
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (REQUIRE_ADMIN_LOGIN && (!user || !ADMIN_EMAILS.includes(user.email ?? ""))) redirect("/login");
