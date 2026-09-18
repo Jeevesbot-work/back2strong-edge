@@ -59,6 +59,18 @@ export default function NewClientPage() {
   });
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Optional health intelligence — blood panel, DNA, doctor debrief. Not required
+  // to generate a programme, but folded into the AI prompt and saved against the
+  // client's profile the moment their account is created (see save()).
+  const [showHealth, setShowHealth] = useState(false);
+  const [health, setHealth] = useState({
+    blood_date: "", blood_provider: "Polaris Health", blood_notes: "", blood_flags: "",
+    dna_date: "", dna_provider: "MUHDO", dna_notes: "",
+    doctor_date: "", doctor_name: "", doctor_summary: "", doctor_flags: "",
+  });
+  const setHealthField = (k: string, v: string) => setHealth((h) => ({ ...h, [k]: v }));
+  const hasHealthData = Object.entries(health).some(([k, v]) => v && !k.endsWith("_provider"));
+
   const [auditId, setAuditId] = useState<string | null>(null);
   const [auditData, setAuditData] = useState<Record<string, unknown> | null>(null);
   const [prefillNote, setPrefillNote] = useState("");
@@ -104,6 +116,7 @@ export default function NewClientPage() {
           ...form,
           days_per_week: parseInt(form.days_per_week) || 3,
           ...(auditData ? { auditContext: auditData } : {}),
+          ...(hasHealthData ? { healthContext: health } : {}),
           ...(isTweak && gen ? { tweak, previous: gen } : {}),
         }),
       });
@@ -131,6 +144,7 @@ export default function NewClientPage() {
           days_per_week: parseInt(form.days_per_week) || 3,
           programme: gen.programme, sessions: gen.sessions,
           ...(auditId ? { auditId } : {}),
+          ...(hasHealthData ? { health } : {}),
         }),
       });
       const data = await res.json();
@@ -204,6 +218,73 @@ export default function NewClientPage() {
             <label style={label}>Medical flags</label>
             <input style={{ ...inputStyle, marginBottom: 0 }} value={form.medical} onChange={(e) => set("medical", e.target.value)} placeholder="T1 diabetes / none" />
           </div>
+
+          <div style={card}>
+            <button
+              onClick={() => setShowHealth((v) => !v)}
+              style={{ width: "100%", background: "transparent", border: "none", padding: 0, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+            >
+              <span style={{ ...label, marginBottom: 0, color: hasHealthData ? S.green : S.sub }}>
+                Health intelligence (optional){hasHealthData ? " · added" : ""}
+              </span>
+              <span style={{ color: S.sub, fontFamily: "Inter, sans-serif", fontSize: 12 }}>{showHealth ? "▲" : "▾"}</span>
+            </button>
+            {!showHealth && (
+              <p style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: S.muted, marginTop: 8, lineHeight: 1.5 }}>
+                Blood panel, DNA and doctor debrief — feeds the programme and saves to their profile. Skip for now and the programme still generates fine.
+              </p>
+            )}
+            {showHealth && (
+              <div style={{ marginTop: 16 }}>
+                <p style={{ ...label, color: S.bronze }}>Blood panel</p>
+                <div style={{ display: "flex", gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={label}>Test date</label>
+                    <input style={inputStyle} type="date" value={health.blood_date} onChange={(e) => setHealthField("blood_date", e.target.value)} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={label}>Provider</label>
+                    <input style={inputStyle} value={health.blood_provider} onChange={(e) => setHealthField("blood_provider", e.target.value)} />
+                  </div>
+                </div>
+                <label style={label}>Key markers / notes</label>
+                <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" as const }} value={health.blood_notes} onChange={(e) => setHealthField("blood_notes", e.target.value)} placeholder="Testosterone 14.2 nmol/L, HbA1c 38, Vit D low..." />
+                <label style={label}>Flagged markers (comma separated)</label>
+                <input style={inputStyle} value={health.blood_flags} onChange={(e) => setHealthField("blood_flags", e.target.value)} placeholder="Low Vit D, borderline cholesterol" />
+
+                <p style={{ ...label, color: S.bronze, marginTop: 8 }}>DNA</p>
+                <div style={{ display: "flex", gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={label}>Test date</label>
+                    <input style={inputStyle} type="date" value={health.dna_date} onChange={(e) => setHealthField("dna_date", e.target.value)} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={label}>Provider</label>
+                    <input style={inputStyle} value={health.dna_provider} onChange={(e) => setHealthField("dna_provider", e.target.value)} />
+                  </div>
+                </div>
+                <label style={label}>Key traits / notes</label>
+                <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" as const }} value={health.dna_notes} onChange={(e) => setHealthField("dna_notes", e.target.value)} placeholder="Power-dominant fibre type, higher injury-risk collagen variant..." />
+
+                <p style={{ ...label, color: S.bronze, marginTop: 8 }}>Doctor debrief</p>
+                <div style={{ display: "flex", gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={label}>Debrief date</label>
+                    <input style={inputStyle} type="date" value={health.doctor_date} onChange={(e) => setHealthField("doctor_date", e.target.value)} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={label}>Doctor name</label>
+                    <input style={inputStyle} value={health.doctor_name} onChange={(e) => setHealthField("doctor_name", e.target.value)} />
+                  </div>
+                </div>
+                <label style={label}>Summary</label>
+                <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" as const }} value={health.doctor_summary} onChange={(e) => setHealthField("doctor_summary", e.target.value)} placeholder="What the doctor flagged and recommended..." />
+                <label style={label}>Key flags (comma separated)</label>
+                <input style={{ ...inputStyle, marginBottom: 0 }} value={health.doctor_flags} onChange={(e) => setHealthField("doctor_flags", e.target.value)} placeholder="Blood pressure watch, cleared for high intensity" />
+              </div>
+            )}
+          </div>
+
           <button
             onClick={() => generate(false)}
             disabled={busy || !form.full_name || !form.email}
