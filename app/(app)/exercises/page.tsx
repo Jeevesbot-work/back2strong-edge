@@ -19,7 +19,16 @@ import {
 const CARD = "#12151C";
 const CREAM = "#F4EEE2";
 const BRASS = "#C9A24B";
-const GIF_TILE = "#EDE7D8";
+// The ExerciseDB GIFs are dark line art on a white background, which used to be
+// hidden behind a cream tile. Inverting flips the background to black and the
+// figure to light, hue-rotating 180deg puts the red muscle highlight back where
+// it started, and screen blending drops the now-black background out against the
+// tile — so the figure sits on the card instead of in a pale box.
+const GIF_TILE = CARD;
+const GIF_FX: React.CSSProperties = {
+  filter: "invert(1) hue-rotate(180deg)",
+  mixBlendMode: "screen",
+};
 
 export default function ExercisesPage() {
   const router = useRouter();
@@ -347,6 +356,7 @@ function ExerciseCard({ exercise, onOpen }: { exercise: Exercise; onOpen: (e: Ex
           src={exercise.gif_url}
           alt={exercise.name}
           loading="lazy"
+          style={GIF_FX}
           className="w-full h-full object-contain"
         />
       </div>
@@ -388,7 +398,7 @@ function ExerciseDetail({ exercise, onBack }: { exercise: Exercise; onBack: () =
       {/* Full GIF */}
       <div className="rounded-2xl overflow-hidden mb-6" style={{ backgroundColor: GIF_TILE }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={exercise.gif_url} alt={exercise.name} className="w-full aspect-square object-contain" />
+        <img src={exercise.gif_url} alt={exercise.name} style={GIF_FX} className="w-full aspect-square object-contain" />
       </div>
 
       <h1 className="font-display font-semibold text-3xl leading-tight mb-5" style={{ color: CREAM }}>

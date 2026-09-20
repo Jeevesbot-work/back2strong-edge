@@ -537,6 +537,15 @@ function RecipeCard({ recipe, onOpen }: { recipe: LiveRecipe; onOpen: (r: LiveRe
       className="pressable w-full rounded-2xl p-4 border border-white/[0.06] flex items-center gap-4 text-left"
       style={{ backgroundColor: RECIPE_INK }}
     >
+      {recipe.image_url && (
+        <img
+          src={recipe.image_url}
+          alt=""
+          loading="lazy"
+          onError={(e) => { e.currentTarget.hidden = true; }}
+          className="w-[72px] h-[72px] rounded-xl object-cover flex-shrink-0"
+        />
+      )}
       <div className="flex-1 min-w-0">
         <p
           className="font-condensed font-bold text-[10px] uppercase tracking-[0.22em] mb-1.5"
@@ -598,6 +607,21 @@ function RecipeDetail({ recipe, onBack }: { recipe: LiveRecipe; onBack: () => vo
           {CATEGORY_LABEL[recipe.category]}
         </p>
       </div>
+
+      {recipe.image_url && (
+        <div className="relative -mx-4 mb-6 overflow-hidden">
+          <img
+            src={recipe.image_url}
+            alt=""
+            onError={(e) => { const box = e.currentTarget.parentElement; if (box) box.hidden = true; }}
+            className="w-full aspect-[4/3] object-cover"
+          />
+          <div
+            className="absolute inset-x-0 bottom-0 h-24 pointer-events-none"
+            style={{ background: "linear-gradient(to top, #0E1014, rgba(14,16,20,0))" }}
+          />
+        </div>
+      )}
 
       <h1 className="font-display font-semibold text-4xl leading-tight mb-3" style={{ color: RECIPE_CREAM }}>{recipe.title}</h1>
       {recipe.description && <p className="text-edge-secondary text-sm leading-relaxed mb-6">{recipe.description}</p>}
