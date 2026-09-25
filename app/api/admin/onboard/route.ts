@@ -88,6 +88,18 @@ export async function POST(req: NextRequest) {
     await admin.from("coach_notes").update({ tag: "audit:onboarded" }).eq("id", auditId);
   }
 
+  // Link anything pre-loaded for this client before their account existed
+  // (full blood panel, doctor debrief, Blueprint scoreboard) — matched on email.
+  try {
+    const em = String(email).trim().toLowerCase();
+    for (const table of ["blood_panels", "doctor_reports", "blueprint_scoreboard"]) {
+      const { error: linkErr } = await admin.from(table).update({ user_id: userId }).is("user_id", null).ilike("client_email", em);
+      if (linkErr) console.error(`[onboard] link ${table} failed:`, linkErr.message);
+    }
+  } catch (e) {
+    console.error("[onboard] pre-loaded data link exception:", e);
+  }
+
   // Health intelligence (blood / DNA / doctor debrief) — best-effort, never blocks
   // onboarding. Populates blood_panels / dna_profiles / doctor_reports for this
   // client the moment their account exists, ready for programme_briefs later.

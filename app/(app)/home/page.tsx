@@ -5,6 +5,8 @@ import { getLesson } from "@/lib/data/lessons";
 import { getClientProgramme, blockSessionKeys } from "@/lib/data/programme-loader";
 import { RevealGroup } from "@/components/Reveal";
 import WalkLogger from "@/components/WalkLogger";
+import BlueprintCard from "@/components/blueprint/BlueprintCard";
+import { getScoreboard, resolveBlueprintUser } from "@/lib/blueprint";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -96,6 +98,11 @@ export default async function HomePage() {
   const currentWeek = programme?.current_week ?? 1;
 
   // Per-client programme → today's scheduled session.
+  // Performance Blueprint scoreboard — only exists for Blueprint clients, so
+  // everyone else (e.g. Strong90 clients) sees an unchanged Home screen.
+  const blueprintUser = await resolveBlueprintUser();
+  const scoreboard = blueprintUser ? await getScoreboard(blueprintUser) : [];
+
   const clientProgramme = await getClientProgramme(targetId);
   const prog = clientProgramme?.programme ?? null;
   const sessions = clientProgramme?.sessions ?? {};
@@ -201,6 +208,8 @@ export default async function HomePage() {
             </div>
           </div>
         )}
+
+        {scoreboard.length > 0 && <BlueprintCard rows={scoreboard} day={currentDay} />}
 
         {/* Readiness + coach note row */}
         <div style={{ display: "flex", gap: 12 }}>
