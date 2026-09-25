@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+
+// Signed in to the app as one of these emails = Command Centre unlocked too.
+const ADMIN_EMAILS = ["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"];
 
 // Private-link gate for the coach admin area — replaces the old
 // REQUIRE_ADMIN_LOGIN=false "wide open" state with a no-password approach:
@@ -14,7 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 const COOKIE_NAME = "b2s_admin_session";
 const ONE_YEAR = 60 * 60 * 24 * 365;
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname, searchParams } = req.nextUrl;
   const accessKey = process.env.ADMIN_ACCESS_KEY;
   const isRoot = pathname === "/";
@@ -75,6 +79,24 @@ export function middleware(req: NextRequest) {
     // not the client app front page.
     if (isRoot) cleanUrl.pathname = "/admin";
     return setCookie(NextResponse.redirect(cleanUrl));
+  }
+
+  // Second way in: signed in to the app (magic link) with an admin email.
+  // Unlocks this browser for a year, exactly like the private link does.
+  try {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} } },
+    );
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+      const res = isRoot ? NextResponse.redirect(new URL("/admin", req.url)) : NextResponse.next();
+      res.cookies.set(COOKIE_NAME, accessKey, { httpOnly: true, secure: true, sameSite: "lax", maxAge: ONE_YEAR, path: "/" });
+      return res;
+    }
+  } catch {
+    // Supabase unreachable — fall through to the normal lock.
   }
 
   // The bare domain must stay public — it's the clients' app. Only the admin
