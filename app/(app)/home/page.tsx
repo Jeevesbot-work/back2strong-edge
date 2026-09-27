@@ -112,6 +112,7 @@ export default async function HomePage() {
     todayPlan && todayPlan.type === "lift" && todayPlan.sessionKey && (todayPlan.fromWeek ?? 1) <= currentWeek
       ? sessions[todayPlan.sessionKey]
       : null;
+  const weeklyTarget = prog ? prog.weeklySchedule.filter((d) => d.type === "lift" && d.sessionKey).length || 3 : 3;
   const lessonDay = ((currentDay - 1) % 30) + 1;
   const todayLesson = getLesson(lessonDay);
 
@@ -250,12 +251,12 @@ export default async function HomePage() {
               <div style={{ background: "#171B21", borderRadius: 20, border: "1px solid #252A32", padding: "16px", height: "100%", minHeight: 120, display: "flex", flexDirection: "column", justifyContent: "center" }}>
                 <p style={{ fontSize: 9, color: "#9BA3AF", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: "Inter, sans-serif", marginBottom: 8 }}>This week</p>
                 <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-                  {[0, 1, 2].map((i) => (
+                  {Array.from({ length: weeklyTarget }, (_, i) => i).map((i) => (
                     <div key={i} style={{ flex: 1, height: 3, borderRadius: 99, background: i < sessionsThisWeek.length ? "#C8965A" : "#252A32" }} />
                   ))}
                 </div>
                 <p style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 22, color: "#F2F1ED", fontWeight: 400, lineHeight: 1 }}>
-                  {sessionsThisWeek.length}<span style={{ fontSize: 13, color: "#9BA3AF", fontFamily: "Inter, sans-serif", fontWeight: 400, marginLeft: 4 }}>of 3</span>
+                  {sessionsThisWeek.length}<span style={{ fontSize: 13, color: "#9BA3AF", fontFamily: "Inter, sans-serif", fontWeight: 400, marginLeft: 4 }}>of {weeklyTarget}</span>
                 </p>
               </div>
             )}

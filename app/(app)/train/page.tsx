@@ -208,10 +208,10 @@ export default async function TrainPage() {
           <p style={{ fontSize: 12, color: "rgba(242,241,237,0.6)", fontFamily: "Inter, sans-serif", marginBottom: 10, lineHeight: 1.5 }}>
             {prog.cardio.inclineWalk.setup}
           </p>
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
             {prog.cardio.inclineWalk.byWeek.map(({ week, duration }) => (
               <div key={week} style={{
-                flex: 1, textAlign: "center", padding: "8px 4px",
+                flex: "1 0 48px", textAlign: "center", padding: "8px 4px",
                 background: week === currentWeek ? "rgba(200,150,90,0.1)" : "#252A32",
                 border: `1px solid ${week === currentWeek ? "rgba(200,150,90,0.3)" : "transparent"}`,
                 borderRadius: 10,
