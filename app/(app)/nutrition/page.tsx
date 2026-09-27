@@ -9,6 +9,8 @@ import { createClient } from "@/lib/supabase/client";
 import PushOptIn from "@/components/PushOptIn";
 import ManualMealEntry from "@/components/ManualMealEntry";
 import DinnerPlanner from "@/components/fuel/DinnerPlanner";
+import FoodPlan from "@/components/fuel/FoodPlan";
+import type { FoodPlan as FoodPlanData } from "@/types";
 import {
   type LiveRecipe,
   type RecipeCategory,
@@ -73,7 +75,12 @@ function proteinComment(protein_g: number): string {
 export default function NutritionPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [tab, setTab] = useState<"today" | "week" | "recipes" | "road">("today");
+  const [tab, setTab] = useState<"today" | "plan" | "week" | "recipes" | "road">("today");
+  // The client's written food plan (if their coach has given them one).
+  const [foodPlan, setFoodPlan] = useState<FoodPlanData | null>(null);
+  useEffect(() => {
+    fetch("/api/programme").then((r) => r.json()).then((d) => { if (d?.programme?.nutrition?.plan) setFoodPlan(d.programme.nutrition.plan as FoodPlanData); }).catch(() => {});
+  }, []);
   const [logs, setLogs] = useState<NutritionLog[]>([]);
   const [analysing, setAnalysing] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -439,9 +446,10 @@ export default function NutritionPage() {
 
       <div className="flex bg-edge-surface rounded-xl p-1 mb-6 border border-white/[0.08]">
         <button onClick={() => setTab("today")} className={`flex-1 py-2 rounded-lg font-condensed font-bold text-xs uppercase tracking-widest transition-all ${tab === "today" ? "bg-edge-bronze text-white" : "text-edge-muted"}`}>Today</button>
+        {foodPlan && <button onClick={() => setTab("plan")} className={`flex-1 py-2 rounded-lg font-condensed font-bold text-xs uppercase tracking-widest transition-all ${tab === "plan" ? "bg-edge-bronze text-white" : "text-edge-muted"}`}>Plan</button>}
         <button onClick={() => setTab("week")} className={`flex-1 py-2 rounded-lg font-condensed font-bold text-xs uppercase tracking-widest transition-all ${tab === "week" ? "bg-edge-bronze text-white" : "text-edge-muted"}`}>Dinners</button>
         <button onClick={() => setTab("recipes")} className={`flex-1 py-2 rounded-lg font-condensed font-bold text-xs uppercase tracking-widest transition-all ${tab === "recipes" ? "bg-edge-bronze text-white" : "text-edge-muted"}`}>Recipes</button>
-        <button onClick={() => setTab("road")} className={`flex-1 py-2 rounded-lg font-condensed font-bold text-xs uppercase tracking-widest transition-all ${tab === "road" ? "bg-edge-bronze text-white" : "text-edge-muted"}`}>On The Road</button>
+        <button onClick={() => setTab("road")} className={`flex-1 py-2 rounded-lg font-condensed font-bold text-xs uppercase tracking-widest transition-all ${tab === "road" ? "bg-edge-bronze text-white" : "text-edge-muted"}`}>{foodPlan ? "Road" : "On The Road"}</button>
       </div>
 
       {tab === "today" && (
@@ -642,6 +650,8 @@ export default function NutritionPage() {
           calorieTarget={calorieTarget}
         />
       )}
+
+      {tab === "plan" && foodPlan && <FoodPlan plan={foodPlan} proteinTarget={proteinTarget} calorieTarget={calorieTarget} />}
 
       {tab === "road" && <FuelOnTheRoad />}
 

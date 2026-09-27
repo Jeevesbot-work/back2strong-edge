@@ -196,12 +196,26 @@ export interface Programme {
     medicalLabel: string;   // e.g. "Heart — guidance only" / "Diabetes — guidance only"
     medicalNote: string;
     recipes: Recipe[];      // client's own meal ideas, shown on the Fuel tab
+    plan?: FoodPlan;        // client's written food plan, shown as Fuel → Plan
   };
   checkIn: {
     frequency: string;
     fields: string[];
     photoNote: string;
   };
+}
+
+export interface FoodPlan {
+  intro: string;
+  split: { slot: string; protein: number; kcal: number }[];
+  slots: { slot: string; protein: number; options: { name: string; detail: string; fish?: boolean }[] }[];
+  week: { day: string; breakfast: string; lunch: string; dinner: string; carbs: string; training?: boolean; fish?: boolean }[];
+  weekNote?: string;
+  shopping: { aisle: string; items: { name: string; note?: string }[] }[];
+  shoppingNote?: string;
+  supplements?: { name: string; note: string }[];
+  rules?: { title: string; body: string }[];
+  tip?: { title: string; body: string };
 }
 
 export interface Recipe {
