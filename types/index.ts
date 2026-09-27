@@ -120,6 +120,21 @@ export interface Exercise {
   notes?: string;
   rest?: string;
   yt?: string; // YouTube demo URL — shown as tappable thumbnail in session view
+  video?: string; // Own demo clip (mp4) — plays inline, looped and muted
+  superset?: string; // Same letter on consecutive exercises = done back to back (e.g. "A")
+  group?: string; // Optional-choice group, see SessionData.pick
+  mode?: "sets" | "timed" | "interval"; // default "sets"
+  intervals?: IntervalProtocol[]; // mode "interval": protocols, chosen by week
+}
+
+export interface IntervalProtocol {
+  label: string; // e.g. "Sprint A"
+  work: number; // seconds
+  rest: number; // seconds
+  rounds: number;
+  blocks?: number; // default 1
+  blockRest?: number; // seconds between blocks
+  weeks?: "odd" | "even" | "all";
 }
 
 export interface SessionData {
@@ -129,6 +144,7 @@ export interface SessionData {
   exercises: Exercise[];
   finisher?: string;
   coachNote?: string;
+  pick?: { group: string; count: number; label?: string }; // "pick 4 of these 5"
 }
 
 // ── Per-client programme (stored as JSONB in client_programmes) ──────────────
