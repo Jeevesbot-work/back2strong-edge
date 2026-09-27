@@ -639,6 +639,7 @@ export default function NutritionPage() {
           loading={recipesLoading}
           onOpenRecipe={setOpenRecipe}
           proteinTarget={proteinTarget}
+          calorieTarget={calorieTarget}
         />
       )}
 

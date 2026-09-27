@@ -15,6 +15,17 @@ const C = { panel: "#171B21", line: "#252A32", text: "#F2F1ED", sub: "#9BA3AF", 
 const cond = "'Barlow Condensed', 'Arial Narrow', sans-serif";
 const OUT = "Eating out";
 const MIN_PROTEIN = 30;
+// How the day's targets are split. Dinner carries the biggest share.
+const SPLIT = [
+  { key: "Breakfast", share: 0.25 },
+  { key: "Lunch", share: 0.25 },
+  { key: "Dinner", share: 0.35 },
+  { key: "Shake / snack", share: 0.15 },
+];
+const DINNER_SHARE = 0.35;
+/** Servings of a recipe needed to hit the dinner protein target, in half-portion steps (1–3). */
+const portionFor = (r: LiveRecipe, dinnerP: number) => Math.min(3, Math.max(1, Math.round((dinnerP / Math.max(1, r.protein_g ?? 1)) * 2) / 2));
+const density = (r: LiveRecipe) => (r.protein_g ?? 0) / Math.max(1, r.calories ?? 1);
 
 type Night = { recipe_id: string | null; out: boolean; leftover?: boolean };
 const LEFT = "Leftovers";
@@ -24,6 +35,7 @@ interface Props {
   loading: boolean;
   onOpenRecipe: (r: LiveRecipe) => void;
   proteinTarget: number;
+  calorieTarget: number;
 }
 
 const isFish = (r: LiveRecipe) => (r.tags ?? []).some((t) => /fish|seafood|salmon|prawn|mackerel|tuna|cod/i.test(t)) || /salmon|prawn|mackerel|tuna|cod|fish/i.test(r.title);
@@ -48,7 +60,7 @@ function rng(seed: number) {
  */
 function buildWeek(pool: LiveRecipe[], seed: number): Night[] {
   const r = rng(seed + 1);
-  const jitter = (a: LiveRecipe, b: LiveRecipe) => (b.protein_g ?? 0) - (a.protein_g ?? 0) + (r() - 0.5) * 16;
+  const jitter = (a: LiveRecipe, b: LiveRecipe) => (density(b) - density(a)) * 100 + (r() - 0.5) * 3;
   const batch = pool.filter((x) => (x.servings ?? 1) >= 4 && !isFish(x)).sort(jitter);
   const fish = pool.filter(isFish).sort(jitter);
   const any = [...pool].sort(jitter);
@@ -80,7 +92,9 @@ function fmtWeek(weekStart: string): string {
   return `${f(d)} – ${f(end)}`;
 }
 
-export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinTarget }: Props) {
+export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinTarget, calorieTarget }: Props) {
+  const dinnerP = Math.round(proteinTarget * DINNER_SHARE);
+  const dinnerK = Math.round(calorieTarget * DINNER_SHARE);
   const thisWeek = useMemo(() => weekStartOf(), []);
   const [weekStart, setWeekStart] = useState(thisWeek);
   const [nights, setNights] = useState<Night[] | null>(null);
@@ -147,11 +161,16 @@ export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinT
 
   const planned = (nights ?? []).map((n) => (!n.out && n.recipe_id ? byId.get(n.recipe_id) : undefined));
   const cooking = planned.filter(Boolean) as LiveRecipe[];
-  const avgP = cooking.length ? Math.round(cooking.reduce((s, r) => s + (r.protein_g ?? 0), 0) / cooking.length) : 0;
+  const avgP = cooking.length ? Math.round(cooking.reduce((s, r) => s + (r.protein_g ?? 0) * portionFor(r, dinnerP), 0) / cooking.length) : 0;
+  const avgK = cooking.length ? Math.round(cooking.reduce((s, r) => s + (r.calories ?? 0) * portionFor(r, dinnerP), 0) / cooking.length) : 0;
   const rest = Math.max(0, proteinTarget - avgP);
   const cookNights = (nights ?? []).map((n, i) => (!n.out && !n.leftover && n.recipe_id ? byId.get(n.recipe_id) : undefined)).filter(Boolean) as LiveRecipe[];
   const pantrySet = new Set<string>();
-  const sources: ShoppingListSource[] = cookNights.map((r) => ({
+  const batchesFor = (r: LiveRecipe) => {
+    const nightsEaten = (nights ?? []).filter((n) => !n.out && n.recipe_id === r.id).length || 1;
+    return Math.max(1, Math.ceil((portionFor(r, dinnerP) * nightsEaten) / Math.max(1, r.servings ?? 1)));
+  };
+  const sources: ShoppingListSource[] = cookNights.flatMap((r) => Array.from({ length: batchesFor(r) }, () => r)).map((r) => ({
     recipeTitle: r.title,
     ingredients: (r.ingredients ?? []).filter((ing) => {
       const core = stripQty(ing);
@@ -197,18 +216,24 @@ export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinT
         </button>
       ) : (
         <>
-          {/* Protein maths */}
+          {/* The day, and what dinner has to carry */}
           <div style={{ marginTop: 18, background: C.panel, border: `1px solid ${C.line}`, borderRadius: 18, padding: 16 }}>
             <div className="flex items-baseline justify-between">
-              <p style={{ fontFamily: cond, fontWeight: 600, fontSize: 12, letterSpacing: "0.18em", textTransform: "uppercase", color: C.sub }}>Your {proteinTarget}g a day</p>
-              <p style={{ fontFamily: cond, fontWeight: 700, fontSize: 22, color: C.text }}>{avgP}g <span style={{ fontSize: 13, color: C.sub, fontWeight: 600 }}>from dinner</span></p>
+              <p style={{ fontFamily: cond, fontWeight: 600, fontSize: 12, letterSpacing: "0.18em", textTransform: "uppercase", color: C.sub }}>Your day</p>
+              <p style={{ fontFamily: cond, fontWeight: 700, fontSize: 20, color: C.text }}>{proteinTarget}g protein <span style={{ color: C.sub, fontWeight: 600, fontSize: 14 }}>· {calorieTarget.toLocaleString("en-GB")} kcal</span></p>
             </div>
-            <div style={{ display: "flex", height: 8, borderRadius: 99, overflow: "hidden", background: C.line, marginTop: 10 }}>
-              <div style={{ width: `${Math.min(100, (avgP / proteinTarget) * 100)}%`, background: `linear-gradient(90deg, #A8743D, ${C.bronzeHi})` }} />
+            <div style={{ display: "flex", gap: 3, marginTop: 10 }}>
+              {SPLIT.map((x) => (
+                <div key={x.key} style={{ flex: x.share, minWidth: 0 }}>
+                  <div style={{ height: 8, borderRadius: 99, background: x.key === "Dinner" ? `linear-gradient(90deg, #A8743D, ${C.bronzeHi})` : C.line }} />
+                  <p style={{ fontSize: 10, color: x.key === "Dinner" ? C.bronzeHi : C.sub, marginTop: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.key}</p>
+                  <p style={{ fontFamily: cond, fontWeight: 700, fontSize: 16, color: C.text }}>{Math.round(proteinTarget * x.share)}g</p>
+                </div>
+              ))}
             </div>
             <p className="text-edge-secondary text-xs mt-3 leading-relaxed">
-              The other <b className="text-white">{rest}g</b> comes from breakfast, lunch and a shake. Build those plates the same way: two palms of protein.
-              {fishCount < 2 && <> Only {fishCount} fish dinner{fishCount === 1 ? "" : "s"} this week, so add salmon, mackerel or tuna at lunch.</>}
+              Dinner is sized to <b className="text-white">about {dinnerP}g protein and {dinnerK} kcal</b>. This week averages <b className="text-white">{avgP}g · {avgK} kcal</b>.
+              {fishCount < 2 && <> Only {fishCount} fish dinner{fishCount === 1 ? "" : "s"}, so add salmon, mackerel or tuna at lunch.</>}
             </p>
           </div>
 
@@ -239,7 +264,11 @@ export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinT
                     </button>
                     {r && !n.out && (
                       <p style={{ fontSize: 12, color: C.bronzeHi, marginTop: 4 }}>
-                        {r.protein_g}g protein <span style={{ color: C.sub }}>· {r.calories} kcal{mins(r) ? ` · ${mins(r)} min` : ""}{r.servings && r.servings > 1 ? ` · serves ${r.servings}` : ""}</span>
+                        {Math.round((r.protein_g ?? 0) * portionFor(r, dinnerP))}g protein <span style={{ color: C.sub }}>· {Math.round((r.calories ?? 0) * portionFor(r, dinnerP))} kcal{mins(r) && !n.leftover ? ` · ${mins(r)} min` : ""}</span>
+                        <span style={{ display: "block", color: C.sub, fontSize: 11, marginTop: 2 }}>
+                          Your portion: {portionFor(r, dinnerP) === 1 ? "1 serving" : `${portionFor(r, dinnerP)} servings`}
+                          {!n.leftover && batchesFor(r) > 1 ? ` · make it ×${batchesFor(r)}` : ""}
+                        </span>
                       </p>
                     )}
                     <div className="flex gap-2 mt-2.5">
