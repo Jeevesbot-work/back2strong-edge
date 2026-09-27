@@ -105,15 +105,7 @@ function Demo({ ex }: { ex: Exercise }) {
     );
   }
   const id = ytId(ex.yt);
-  if (id) {
-    return (
-      <a href={ex.yt} target="_blank" rel="noopener noreferrer" style={{ display: "block", position: "relative", borderRadius: 18, overflow: "hidden", aspectRatio: "16 / 9" }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`https://img.youtube.com/vi/${id}/mqdefault.jpg`} alt={`Demo: ${ex.name}`} style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.8 }} />
-        <span style={{ position: "absolute", left: 12, bottom: 10, ...label, color: C.text }}>▶ Watch demo</span>
-      </a>
-    );
-  }
+  if (id) return <EmbeddedDemo id={id} name={ex.name} />;
   const mv = movementForExercise(ex.name);
   if (mv) {
     return (
@@ -121,6 +113,33 @@ function Demo({ ex }: { ex: Exercise }) {
     );
   }
   return null;
+}
+
+// In-app demo: branded poster, tap to play inside the app (no trip to YouTube).
+function EmbeddedDemo({ id, name }: { id: string; name: string }) {
+  const [playing, setPlaying] = useState(false);
+  const box: React.CSSProperties = { position: "relative", borderRadius: 18, overflow: "hidden", aspectRatio: "16 / 9", maxWidth: "100%", background: "#000", border: `1px solid ${C.line}` };
+  if (playing) {
+    return (
+      <div style={box}>
+        <iframe title={`Demo: ${name}`} src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&controls=1`}
+          allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }} />
+      </div>
+    );
+  }
+  return (
+    <button type="button" onClick={() => setPlaying(true)} aria-label={`Play demo: ${name}`} style={{ ...box, display: "block", width: "100%", padding: 0, cursor: "pointer" }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "grayscale(0.35) contrast(1.05) brightness(0.55)" }} />
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(11,13,16,0.9), rgba(11,13,16,0.1) 60%)" }} />
+      <div style={{ position: "absolute", left: 14, bottom: 12, right: 14, display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ width: 42, height: 42, borderRadius: "50%", background: C.bronze, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill={C.bg} style={{ marginLeft: 2 }}><path d="M6 4l14 8-14 8z" /></svg>
+        </span>
+        <span style={{ ...label, color: C.text }}>Watch the demo</span>
+      </div>
+    </button>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
