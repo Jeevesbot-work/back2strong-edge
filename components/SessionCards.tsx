@@ -89,7 +89,7 @@ export default function SessionCards({ weeklySchedule, sessions, supabaseDoneTyp
                     </svg>
                   ) : (
                     <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 14, color: "#C8965A", fontWeight: 400 }}>
-                      {label.split(" ")[0][0]}{label.split(" ")[1]}
+                      {/^Day [A-Z]\b/.test(label) ? `D${label.split(" ")[1]}` : day}
                     </span>
                   )}
                 </div>
