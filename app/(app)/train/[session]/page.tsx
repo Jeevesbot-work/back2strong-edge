@@ -98,9 +98,11 @@ function Stepper({ value, onChange, step, unit, placeholder, disabled, id }: {
 // ── Demo media ───────────────────────────────────────────────────────────────
 function Demo({ ex }: { ex: Exercise }) {
   if (ex.video) {
+    // Nick's own demo: plays inline, tap for sound. Portrait clips keep their shape.
     return (
-      <div style={{ borderRadius: 18, overflow: "hidden", background: "#000", aspectRatio: "16 / 10", maxWidth: "100%" }}>
-        <video src={ex.video} autoPlay muted loop playsInline style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+      <div style={{ borderRadius: 18, overflow: "hidden", background: "#000", border: `1px solid ${C.line}`, display: "flex", justifyContent: "center" }}>
+        <video src={ex.video} poster={ex.video.replace(/\.mp4$/, ".jpg")} controls playsInline preload="metadata"
+          style={{ width: "100%", maxHeight: "62vh", objectFit: "contain", display: "block", background: "#000" }} />
       </div>
     );
   }
