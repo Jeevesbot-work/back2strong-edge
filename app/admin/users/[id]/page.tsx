@@ -5,6 +5,7 @@ import Link from "next/link";
 import ApproveButton from "./ApproveButton";
 import AddNoteForm from "./AddNoteForm";
 import ResendLinkButton from "./ResendLinkButton";
+import CopyLoginLinkButton from "./CopyLoginLinkButton";
 import AssignProgrammeButton from "./AssignProgrammeButton";
 import SetWeekButton from "./SetWeekButton";
 import MessageClientBox from "./MessageClientBox";
@@ -108,6 +109,7 @@ export default async function AdminUserPage({ params }: { params: { id: string }
           {profile?.approved && (
             <span className="bg-green-500/20 text-green-400 font-condensed text-xs uppercase px-3 py-1.5 rounded-lg">Active</span>
           )}
+          {profile?.email && <CopyLoginLinkButton email={profile.email} />}
           {profile?.email && <ResendLinkButton email={profile.email} />}
           <Link
             href={`/admin/preview/${userId}`}
