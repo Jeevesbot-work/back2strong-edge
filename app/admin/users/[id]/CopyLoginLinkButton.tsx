@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-// Creates a fresh one-time sign-in link and copies it, ready to paste into WhatsApp.
+// Creates a 7-day sign-in link and copies it, ready to paste into WhatsApp.
 export default function CopyLoginLinkButton({ email }: { email: string }) {
   const [state, setState] = useState<"idle" | "loading" | "copied" | "show" | "error">("idle");
   const [link, setLink] = useState("");
