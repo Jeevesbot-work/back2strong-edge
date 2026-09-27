@@ -13,9 +13,10 @@ interface Props {
   sources: ShoppingListSource[];
   subtitle: string;
   onBack: () => void;
+  pantry?: string[]; // cupboard staples, shown as a compact check line instead of list rows
 }
 
-export default function WeekShoppingList({ sources, subtitle, onBack }: Props) {
+export default function WeekShoppingList({ sources, subtitle, onBack, pantry }: Props) {
   const groups = useMemo(() => groupByAisle(buildShoppingList(sources)), [sources]);
   const total = groups.reduce((n, g) => n + g.items.length, 0);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -76,6 +77,13 @@ export default function WeekShoppingList({ sources, subtitle, onBack }: Props) {
               <button onClick={() => setChecked(new Set())} className="text-xs text-edge-secondary underline underline-offset-2">Clear ticks</button>
             )}
           </div>
+
+          {pantry && pantry.length > 0 && (
+            <div className="rounded-2xl border border-white/10 bg-edge-surface px-4 py-3 mb-5">
+              <p className="font-condensed font-bold text-xs uppercase tracking-[0.18em] mb-1" style={{ color: BRASS }}>Check the cupboard</p>
+              <p className="text-edge-secondary text-xs leading-relaxed">{pantry.join(" · ")}</p>
+            </div>
+          )}
 
           {groups.map((g) => (
             <section key={g.aisle} className="mb-6">

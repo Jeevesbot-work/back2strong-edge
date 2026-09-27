@@ -8,7 +8,7 @@ import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import PushOptIn from "@/components/PushOptIn";
 import ManualMealEntry from "@/components/ManualMealEntry";
-import WeekPlanner from "@/components/fuel/WeekPlanner";
+import DinnerPlanner from "@/components/fuel/DinnerPlanner";
 import {
   type LiveRecipe,
   type RecipeCategory,
@@ -439,7 +439,7 @@ export default function NutritionPage() {
 
       <div className="flex bg-edge-surface rounded-xl p-1 mb-6 border border-white/[0.08]">
         <button onClick={() => setTab("today")} className={`flex-1 py-2 rounded-lg font-condensed font-bold text-xs uppercase tracking-widest transition-all ${tab === "today" ? "bg-edge-bronze text-white" : "text-edge-muted"}`}>Today</button>
-        <button onClick={() => setTab("week")} className={`flex-1 py-2 rounded-lg font-condensed font-bold text-xs uppercase tracking-widest transition-all ${tab === "week" ? "bg-edge-bronze text-white" : "text-edge-muted"}`}>Week</button>
+        <button onClick={() => setTab("week")} className={`flex-1 py-2 rounded-lg font-condensed font-bold text-xs uppercase tracking-widest transition-all ${tab === "week" ? "bg-edge-bronze text-white" : "text-edge-muted"}`}>Dinners</button>
         <button onClick={() => setTab("recipes")} className={`flex-1 py-2 rounded-lg font-condensed font-bold text-xs uppercase tracking-widest transition-all ${tab === "recipes" ? "bg-edge-bronze text-white" : "text-edge-muted"}`}>Recipes</button>
         <button onClick={() => setTab("road")} className={`flex-1 py-2 rounded-lg font-condensed font-bold text-xs uppercase tracking-widest transition-all ${tab === "road" ? "bg-edge-bronze text-white" : "text-edge-muted"}`}>On The Road</button>
       </div>
@@ -634,7 +634,7 @@ export default function NutritionPage() {
       )}
 
       {tab === "week" && (
-        <WeekPlanner
+        <DinnerPlanner
           recipes={recipes}
           loading={recipesLoading}
           onOpenRecipe={setOpenRecipe}
