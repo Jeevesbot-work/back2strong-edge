@@ -11,6 +11,8 @@ import ManualMealEntry from "@/components/ManualMealEntry";
 import DinnerPlanner from "@/components/fuel/DinnerPlanner";
 import FoodPlan from "@/components/fuel/FoodPlan";
 import CoachFuelReport from "@/components/fuel/CoachFuelReport";
+import MacroBars from "@/components/fuel/MacroBars";
+import { macroTargets } from "@/lib/fuel-report";
 import type { FoodPlan as FoodPlanData } from "@/types";
 import {
   type LiveRecipe,
@@ -404,12 +406,10 @@ export default function NutritionPage() {
       }
     : null;
 
-  const totalProtein = logs.reduce((s, l) => s + l.protein_g, 0);
-  const totalCalories = logs.reduce((s, l) => s + l.calories, 0);
-  const totalCarbs = logs.reduce((s, l) => s + l.carbs_g, 0);
-  const totalFat = logs.reduce((s, l) => s + l.fat_g, 0);
-  const proteinPct = Math.min((totalProtein / proteinTarget) * 100, 100);
-  const caloriePct = Math.min((totalCalories / calorieTarget) * 100, 100);
+  const totalProtein = logs.reduce((s, l) => s + Number(l.protein_g ?? 0), 0);
+  const totalCalories = logs.reduce((s, l) => s + Number(l.calories ?? 0), 0);
+  const totalCarbs = logs.reduce((s, l) => s + Number(l.carbs_g ?? 0), 0);
+  const totalFat = logs.reduce((s, l) => s + Number(l.fat_g ?? 0), 0);
   const remaining = { protein: proteinTarget - totalProtein, calories: calorieTarget - totalCalories };
 
   if (shoppingListOpen) {
@@ -562,19 +562,10 @@ export default function NutritionPage() {
           {logs.length > 0 && (
             <div className="anim-2 bg-edge-surface rounded-[20px] p-4 border border-white/[0.08] mb-6">
               <p className="font-condensed font-bold text-xs uppercase tracking-widest text-edge-muted mb-4">Today's Totals</p>
-              <div className="mb-4">
-                <div className="flex justify-between mb-1"><span className="text-white text-sm font-condensed font-bold">Protein</span><span className="text-edge-muted text-xs">{Math.round(totalProtein)}g / {proteinTarget}g</span></div>
-                <div className="h-2 bg-white/10 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all" style={{ width: `${proteinPct}%`, backgroundColor: totalProtein >= proteinTarget ? "#10B981" : "#F5A623" }} /></div>
-              </div>
-              <div className="mb-4">
-                <div className="flex justify-between mb-1"><span className="text-white text-sm font-condensed font-bold">Calories</span><span className="text-edge-muted text-xs">{Math.round(totalCalories)} / {calorieTarget}</span></div>
-                <div className="h-2 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-edge-bronze rounded-full transition-all" style={{ width: `${caloriePct}%` }} /></div>
-              </div>
-              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10">
-                <div className="text-center"><p className="font-condensed font-bold text-lg text-white">{Math.round(totalProtein)}g</p><p className="text-edge-muted text-xs">Protein</p></div>
-                <div className="text-center"><p className="font-condensed font-bold text-lg text-white">{Math.round(totalCarbs)}g</p><p className="text-edge-muted text-xs">Carbs</p></div>
-                <div className="text-center"><p className="font-condensed font-bold text-lg text-white">{Math.round(totalFat)}g</p><p className="text-edge-muted text-xs">Fat</p></div>
-              </div>
+              <MacroBars
+                totals={{ calories: totalCalories, protein_g: totalProtein, carbs_g: totalCarbs, fat_g: totalFat }}
+                targets={macroTargets(calorieTarget, proteinTarget)}
+              />
             </div>
           )}
 
