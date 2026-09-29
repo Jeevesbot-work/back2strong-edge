@@ -10,13 +10,15 @@ import { macroTargets, sumItems, toItems, suggestNote } from "@/lib/fuel-report"
 
 async function buildDay(userId: string, date: string) {
   const admin = createAdminClient();
-  const [{ data: profile }, { data: logs }, { data: sent }] = await Promise.all([
+  const [{ data: profile }, { data: logs }, { data: sent }, { data: prog }] = await Promise.all([
     admin.from("profiles").select("full_name, calorie_target, protein_target").eq("id", userId).single(),
     admin.from("nutrition_logs").select("meal_name, calories, protein_g, carbs_g, fat_g, created_at").eq("user_id", userId).eq("date", date).order("created_at", { ascending: true }),
     admin.from("fuel_reports").select("id, created_at").eq("user_id", userId).eq("date", date).order("created_at", { ascending: false }).limit(1),
+    admin.from("client_programmes").select("programme->nutrition").eq("user_id", userId).maybeSingle(),
   ]);
+  const nut = ((prog as { nutrition?: { fatTarget?: number; carbTarget?: number } } | null)?.nutrition) ?? {};
   const items = toItems(logs ?? []);
-  const targets = macroTargets(profile?.calorie_target ?? null, profile?.protein_target ?? null);
+  const targets = macroTargets(profile?.calorie_target ?? null, profile?.protein_target ?? null, nut.fatTarget, nut.carbTarget);
   const totals = sumItems(items);
   const firstName = (profile?.full_name ?? "Mate").split(" ")[0];
   const dupes = items.filter((i) => i.duplicate);

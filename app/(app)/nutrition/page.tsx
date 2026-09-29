@@ -95,8 +95,16 @@ export default function NutritionPage() {
   const [tab, setTab] = useState<"today" | "plan" | "week" | "recipes" | "road">("today");
   // The client's written food plan (if their coach has given them one).
   const [foodPlan, setFoodPlan] = useState<FoodPlanData | null>(null);
+  // Coach-set fat/carb targets from the programme (else derived from calories).
+  const [fatTarget, setFatTarget] = useState<number | null>(null);
+  const [carbTarget, setCarbTarget] = useState<number | null>(null);
   useEffect(() => {
-    fetch("/api/programme").then((r) => r.json()).then((d) => { if (d?.programme?.nutrition?.plan) setFoodPlan(d.programme.nutrition.plan as FoodPlanData); }).catch(() => {});
+    fetch("/api/programme").then((r) => r.json()).then((d) => {
+      const nut = d?.programme?.nutrition;
+      if (nut?.plan) setFoodPlan(nut.plan as FoodPlanData);
+      if (nut?.fatTarget > 0) setFatTarget(nut.fatTarget);
+      if (nut?.carbTarget > 0) setCarbTarget(nut.carbTarget);
+    }).catch(() => {});
   }, []);
   const [logs, setLogs] = useState<NutritionLog[]>([]);
   const [analysing, setAnalysing] = useState(false);
@@ -596,7 +604,7 @@ export default function NutritionPage() {
               <p className="font-condensed font-bold text-xs uppercase tracking-widest text-edge-muted mb-4">Today's Totals</p>
               <MacroBars
                 totals={{ calories: totalCalories, protein_g: totalProtein, carbs_g: totalCarbs, fat_g: totalFat }}
-                targets={macroTargets(calorieTarget, proteinTarget)}
+                targets={macroTargets(calorieTarget, proteinTarget, fatTarget, carbTarget)}
               />
             </div>
           )}

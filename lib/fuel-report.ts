@@ -17,11 +17,12 @@ export interface ReportItem extends Macros {
 // Full four-macro targets from the two the profile stores.
 // Fat ~28% of calories (healthy floor for 40+ men training hard);
 // carbs fill whatever is left after protein and fat.
-export function macroTargets(calorieTarget: number | null, proteinTarget: number | null): Macros {
+// A coach-set fat/carb target (programme.nutrition.fatTarget / carbTarget) wins.
+export function macroTargets(calorieTarget: number | null, proteinTarget: number | null, fatTarget?: number | null, carbTarget?: number | null): Macros {
   const calories = calorieTarget && calorieTarget > 0 ? calorieTarget : 2200;
   const protein_g = proteinTarget && proteinTarget > 0 ? proteinTarget : 160;
-  const fat_g = Math.round((calories * 0.28) / 9);
-  const carbs_g = Math.max(0, Math.round((calories - protein_g * 4 - fat_g * 9) / 4));
+  const fat_g = fatTarget && fatTarget > 0 ? fatTarget : Math.round((calories * 0.28) / 9);
+  const carbs_g = carbTarget && carbTarget > 0 ? carbTarget : Math.max(0, Math.round((calories - protein_g * 4 - fat_g * 9) / 4));
   return { calories, protein_g, carbs_g, fat_g };
 }
 
