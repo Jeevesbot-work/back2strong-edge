@@ -75,6 +75,20 @@ function proteinComment(protein_g: number): string {
     : "Fuel more than protein. Fine now and then — just don't let it be the whole meal.";
 }
 
+function buildWeek(rows: { date: string; protein_g: unknown; calories: unknown }[]): DayTotal[] {
+  const byDay = new Map<string, DayTotal>();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const key = d.toISOString().split("T")[0];
+    byDay.set(key, { date: key, protein: 0, calories: 0 });
+  }
+  for (const r of rows) {
+    const day = byDay.get(r.date);
+    if (day) { day.protein += Number(r.protein_g) || 0; day.calories += Number(r.calories) || 0; }
+  }
+  return Array.from(byDay.values());
+}
+
 export default function NutritionPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -121,7 +135,30 @@ export default function NutritionPage() {
   const [adjustmentSnoozed, setAdjustmentSnoozed] = useState(true); // true until we've checked localStorage
   const [applyingAdjustment, setApplyingAdjustment] = useState(false);
 
-  useEffect(() => { loadTodaysLogs(); loadTargetsAndWeek(); }, []);
+  // Coach preview: when Nick is previewing a client, load that client's Fuel
+  // data server-side so this screen matches exactly what they see.
+  const [previewName, setPreviewName] = useState<string | null>(null);
+  const [previewReport, setPreviewReport] = useState<unknown>(undefined);
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/fuel/preview");
+        const d = await r.json();
+        if (d?.previewing) {
+          setPreviewName(d.name ?? "client");
+          setPreviewReport(d.report ?? null);
+          setLogs(d.logs ?? []);
+          if (d.profile?.protein_target > 0) setProteinTarget(d.profile.protein_target);
+          if (d.profile?.calorie_target > 0) setCalorieTarget(d.profile.calorie_target);
+          setGoal(d.profile?.goal ?? null);
+          setWeek(buildWeek(d.weekRows ?? []));
+          setWeightPoints((d.checkIns ?? []).map((c: { date: string; weight_kg: number }) => ({ date: c.date, kg: Number(c.weight_kg) })));
+          return;
+        }
+      } catch { /* fall through to normal load */ }
+      loadTodaysLogs(); loadTargetsAndWeek();
+    })();
+  }, []);
 
   async function loadTargetsAndWeek() {
     const supabase = createClient();
@@ -143,17 +180,7 @@ export default function NutritionPage() {
       .from("nutrition_logs").select("date, protein_g, calories")
       .eq("user_id", user.id).gte("date", sinceStr);
 
-    const byDay = new Map<string, DayTotal>();
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      const key = d.toISOString().split("T")[0];
-      byDay.set(key, { date: key, protein: 0, calories: 0 });
-    }
-    for (const r of rows ?? []) {
-      const day = byDay.get(r.date as string);
-      if (day) { day.protein += Number(r.protein_g) || 0; day.calories += Number(r.calories) || 0; }
-    }
-    setWeek(Array.from(byDay.values()));
+    setWeek(buildWeek(rows ?? []));
 
     // Last 28 days of weigh-ins (logged at check-in) — the trend Adaptive Fuel reasons over.
     const monthAgo = new Date();
@@ -455,7 +482,12 @@ export default function NutritionPage() {
 
       {tab === "today" && (
         <>
-          <CoachFuelReport />
+          {previewName && (
+            <div className="rounded-xl bg-edge-gold/10 border border-edge-gold/30 px-3 py-2 mb-4">
+              <p className="text-edge-gold text-xs font-condensed uppercase tracking-widest">Coach preview · viewing {previewName}&apos;s Fuel</p>
+            </div>
+          )}
+          <CoachFuelReport preview={previewReport} />
           <button onClick={() => fileRef.current?.click()} disabled={analysing} className="anim-0 pressable w-full bg-edge-bronze rounded-[20px] p-5 flex items-center gap-4 mb-6 transition-transform disabled:opacity-60">
             <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
               {analysing ? <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" /> : (

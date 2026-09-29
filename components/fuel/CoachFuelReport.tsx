@@ -16,11 +16,13 @@ interface Report {
 }
 
 // Nick's latest Fuel Report (last 3 days) — pinned at the top of Fuel > Today.
-export default function CoachFuelReport() {
+// `preview`: undefined = normal client load; null/report = coach preview data.
+export default function CoachFuelReport({ preview }: { preview?: unknown } = {}) {
   const [report, setReport] = useState<Report | null>(null);
   const [open, setOpen] = useState(true);
 
   useEffect(() => {
+    if (preview !== undefined) { setReport((preview as Report) ?? null); return; }
     (async () => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -35,7 +37,7 @@ export default function CoachFuelReport() {
         .limit(1);
       if (data?.[0]) setReport(data[0] as Report);
     })();
-  }, []);
+  }, [preview]);
 
   if (!report) return null;
 
