@@ -10,6 +10,7 @@ import PushOptIn from "@/components/PushOptIn";
 import ManualMealEntry from "@/components/ManualMealEntry";
 import DinnerPlanner from "@/components/fuel/DinnerPlanner";
 import FoodPlan from "@/components/fuel/FoodPlan";
+import CoachFuelReport from "@/components/fuel/CoachFuelReport";
 import type { FoodPlan as FoodPlanData } from "@/types";
 import {
   type LiveRecipe,
@@ -454,6 +455,7 @@ export default function NutritionPage() {
 
       {tab === "today" && (
         <>
+          <CoachFuelReport />
           <button onClick={() => fileRef.current?.click()} disabled={analysing} className="anim-0 pressable w-full bg-edge-bronze rounded-[20px] p-5 flex items-center gap-4 mb-6 transition-transform disabled:opacity-60">
             <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
               {analysing ? <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" /> : (

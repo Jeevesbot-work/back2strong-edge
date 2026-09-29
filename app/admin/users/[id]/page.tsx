@@ -10,6 +10,7 @@ import AssignProgrammeButton from "./AssignProgrammeButton";
 import SetWeekButton from "./SetWeekButton";
 import MessageClientBox from "./MessageClientBox";
 import WeightTrendChart from "./WeightTrendChart";
+import FuelReportPanel from "./FuelReportPanel";
 
 export default async function AdminUserPage({ params }: { params: { id: string } }) {
   // TEMP: single-user open access — set back to true to re-gate behind admin
@@ -242,6 +243,14 @@ export default async function AdminUserPage({ params }: { params: { id: string }
           </div>
         )}
         <AddNoteForm userId={userId} />
+      </div>
+
+      {/* Fuel report — review a logged day and send the breakdown to the client */}
+      <div className="mb-4">
+        <h2 className="font-condensed font-bold text-xs uppercase tracking-widest text-edge-muted mb-3">
+          Fuel Report
+        </h2>
+        <FuelReportPanel userId={userId} />
       </div>
 
       {/* Weight trend — visual, at a glance */}
