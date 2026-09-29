@@ -12,6 +12,7 @@ import DinnerPlanner from "@/components/fuel/DinnerPlanner";
 import FoodPlan from "@/components/fuel/FoodPlan";
 import CoachFuelReport from "@/components/fuel/CoachFuelReport";
 import MacroBars from "@/components/fuel/MacroBars";
+import TellEdge from "@/components/fuel/TellEdge";
 import { macroTargets } from "@/lib/fuel-report";
 import type { FoodPlan as FoodPlanData } from "@/types";
 import {
@@ -510,6 +511,8 @@ export default function NutritionPage() {
               <p className="text-white/70 text-sm mt-0.5">{analysing ? "Edge is reading your plate" : "AI reads the plate — you get the macros"}</p>
             </div>
           </button>
+
+          <TellEdge onLogged={(newLogs) => { if (newLogs.length) { setLatest(null); setLogs((prev) => [...[...newLogs].reverse(), ...prev]); } }} />
           <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
           <ManualMealEntry onLogged={(log) => { setLatest(log); setLogs((prev) => [log, ...prev]); }} />
