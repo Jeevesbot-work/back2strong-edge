@@ -36,12 +36,17 @@ function asNumber(value: unknown): number | null {
   return null;
 }
 
+function weekKey(date = new Date()): string {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() - day + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 function sourceFor(category: RecipeCategory, index: number): SourcePost {
-  const day = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const stamp = Math.random().toString(36).slice(2, 6);
   return {
     platform: "b2s",
-    sourceKey: `b2s:${category}-${index}-${day}-${stamp}`,
+    sourceKey: `b2s:${category}-${index}-${weekKey()}`,
     url: "",
     creditHandle: "",
     caption: "",
