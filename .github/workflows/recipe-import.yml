@@ -1,0 +1,42 @@
+name: Weekly recipe import
+
+# Apify, Claude, and image generation usually outlast a Vercel function, so the
+# weekly job runs here. It writes unpublished drafts only. Dedupe on source_key
+# makes a second run the same week a no-op for posts already imported.
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run using the fixture. Writes nothing."
+        type: boolean
+        default: false
+
+concurrency:
+  group: recipe-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Dry run
+        if: ${{ inputs.dry_run }}
+        run: npm run recipes:dry
+      - name: Import unpublished drafts
+        if: ${{ !inputs.dry_run }}
+        run: npm run recipes:import
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          RECIPE_CREATORS_JSON: ${{ vars.RECIPE_CREATORS_JSON }}
