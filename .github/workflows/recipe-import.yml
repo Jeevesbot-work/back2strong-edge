@@ -12,6 +12,13 @@ on:
         description: "Dry run using the fixture. Writes nothing."
         type: boolean
         default: false
+  # One-shot starter. workflow_dispatch exists, but this token cannot create
+  # a dispatch event. A push that touches the sentinel file starts the live
+  # import once. Remove this trigger after that run is queued.
+  push:
+    branches: [main]
+    paths:
+      - ".github/recipe-import-once"
 
 concurrency:
   group: recipe-import
