@@ -118,21 +118,44 @@ export function mergeReelTranscripts(posts: SourcePost[], items: Array<Record<st
   });
 }
 
+/** Turn an Apify response into JSON, or name the actor step when the body is HTML. */
+export function parseActorBody(body: string, status: number, actor: string, step: string): unknown {
+  const snippet = body.replace(/\s+/g, " ").trim().slice(0, 180);
+  const trimmed = body.trimStart();
+  if (trimmed.startsWith("<") || /^<!doctype/i.test(trimmed)) {
+    throw new Error(`${actor} ${step} returned non-JSON (${status}): ${snippet}`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = body.trim() ? JSON.parse(body) : null;
+  } catch {
+    throw new Error(`${actor} ${step} returned non-JSON (${status}): ${snippet}`);
+  }
+  if (status < 200 || status >= 300) {
+    throw new Error(`Apify ${actor} ${step} failed (${status}): ${snippet}`);
+  }
+  return parsed;
+}
+
+async function readActorJson(res: Response, actor: string, step: string): Promise<unknown> {
+  return parseActorBody(await res.text(), res.status, actor, step);
+}
+
 async function runActor(actor: string, input: unknown): Promise<Array<Record<string, unknown>>> {
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error("APIFY_TOKEN is not set");
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
 
   const startRes = await fetch(`${API}/acts/${actor}/runs`, {
     method: "POST",
     headers,
     body: JSON.stringify(input),
   });
-  if (!startRes.ok) {
-    const detail = (await startRes.text()).slice(0, 280);
-    throw new Error(`Apify ${actor} did not start (${startRes.status}): ${detail}`);
-  }
-  const started = asRecord(await startRes.json());
+  const started = asRecord(await readActorJson(startRes, actor, "start"));
   const run = asRecord(started?.data);
   const runId = typeof run?.id === "string" ? run.id : "";
   const datasetId = typeof run?.defaultDatasetId === "string" ? run.defaultDatasetId : "";
@@ -144,17 +167,29 @@ async function runActor(actor: string, input: unknown): Promise<Array<Record<str
     if (Date.now() > deadline) throw new Error(`Apify ${actor} timed out after 8 minutes`);
     await sleep(5000);
     const pollRes = await fetch(`${API}/actor-runs/${runId}`, { headers });
-    const poll = asRecord(await pollRes.json());
+    const poll = asRecord(await readActorJson(pollRes, actor, "poll"));
     const data = asRecord(poll?.data);
     status = typeof data?.status === "string" ? data.status : "FAILED";
   }
   if (status !== "SUCCEEDED") throw new Error(`Apify ${actor} ended with ${status}`);
 
-  const itemsRes = await fetch(`${API}/datasets/${datasetId}/items?clean=true&limit=500`, { headers });
-  if (!itemsRes.ok) throw new Error(`Apify ${actor} dataset could not be read (${itemsRes.status})`);
-  const items = await itemsRes.json();
+  const itemsRes = await fetch(`${API}/datasets/${datasetId}/items?clean=true&format=json&limit=500`, { headers });
+  const items = await readActorJson(itemsRes, actor, "items");
   if (!Array.isArray(items)) return [];
   return items.map((item) => asRecord(item)).filter((item): item is Record<string, unknown> => !!item);
+}
+
+function youtubeInput(handle: string, subtitlesFormat: "plaintext" | "srt") {
+  return {
+    startUrls: [{ url: youtubeChannelUrl(handle) }],
+    maxResults: YOUTUBE_MAX_RESULTS,
+    maxResultsShorts: YOUTUBE_MAX_SHORTS,
+    maxResultStreams: 0,
+    oldestPostDate: SCRAPE_WINDOW,
+    transcriptionAndSubtitle: "ALWAYS_SUBTITLES",
+    subtitlesLanguage: "en",
+    subtitlesFormat,
+  };
 }
 
 export async function scrapeCreators(): Promise<{ posts: SourcePost[]; errors: string[] }> {
@@ -191,20 +226,24 @@ export async function scrapeCreators(): Promise<{ posts: SourcePost[]; errors: s
     }
   }
 
-  try {
-    const items = await runActor("streamers~youtube-scraper", {
-      startUrls: creators.youtube.map((handle) => ({ url: youtubeChannelUrl(handle) })),
-      maxResults: YOUTUBE_MAX_RESULTS,
-      maxResultsShorts: YOUTUBE_MAX_SHORTS,
-      maxResultStreams: 0,
-      oldestPostDate: SCRAPE_WINDOW,
-      transcriptionAndSubtitle: "ALWAYS_SUBTITLES",
-      subtitlesLanguage: "en",
-      subtitlesFormat: "plaintext",
-    });
-    posts = posts.concat(youtubeItemsToPosts(items));
-  } catch (err) {
-    errors.push(err instanceof Error ? err.message : "YouTube scrape failed");
+  for (const handle of creators.youtube) {
+    try {
+      const items = await runActor("streamers~youtube-scraper", youtubeInput(handle, "plaintext"));
+      posts = posts.concat(youtubeItemsToPosts(items));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "YouTube scrape failed";
+      // A bad subtitle format fails before the actor runs. Retry that channel as SRT.
+      if (!/start returned non-JSON|start failed|did not start/i.test(message)) {
+        errors.push(message);
+        continue;
+      }
+      try {
+        const items = await runActor("streamers~youtube-scraper", youtubeInput(handle, "srt"));
+        posts = posts.concat(youtubeItemsToPosts(items));
+      } catch (retryErr) {
+        errors.push(retryErr instanceof Error ? retryErr.message : message);
+      }
+    }
   }
 
   return { posts, errors };

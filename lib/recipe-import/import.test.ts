@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mergeReelTranscripts, needsReelTranscript, subtitlesToText } from "./apify";
-import { classifyPost, hasRecipeBody } from "./classify";
+import { mergeReelTranscripts, needsReelTranscript, parseActorBody, subtitlesToText } from "./apify";
+import { classifyPost, hasRecipeBody, worthRewriting } from "./classify";
+import { evaluatePosts } from "./evaluate";
 import { contentFingerprint, findDuplicate, titleSimilarity } from "./dedupe";
 import { toDraftRow } from "./draft";
 import { extractRecipe } from "./extract";
@@ -90,6 +91,53 @@ describe("classify and extract", () => {
     const merged = mergeReelTranscripts([reel], [{ shortCode: "ABC123", transcript: "200g chicken breast\n200g rice\n100g yoghurt\n460 kcal\n47g protein" }]);
     assert.match(merged[0].transcript ?? "", /200g chicken breast/);
     assert.equal(subtitlesToText("1\n00:00:01,000 --> 00:00:02,000\nCook the rice"), "Cook the rice");
+  });
+
+  it("accepts card macros and a spoken cooking transcript", async () => {
+    assert.equal(
+      classifyPost("Calories: 520 / Protein: 54g / 500 grams chicken breast and 200g rice"),
+      "recipe",
+    );
+    assert.equal(classifyPost("610 calories and 47g protein, no ingredients listed"), "not_a_recipe");
+
+    const spoken = Array.from({ length: 4 }, () =>
+      "Today we cook a high protein lunch. You need chicken, about five hundred grams, rice, and a tablespoon of soy. This recipe serves two.",
+    ).join(" ");
+    assert.ok(spoken.length >= 280);
+    assert.equal(hasRecipeBody("Lunch idea"), false);
+    assert.equal(worthRewriting("Lunch idea", spoken), true);
+
+    let extracted = 0;
+    const post: SourcePost = {
+      platform: "instagram",
+      sourceKey: "ig:spoken-lunch",
+      url: "https://example.invalid/reel/spoken-lunch",
+      creditHandle: "someone",
+      caption: "Lunch idea",
+      transcript: spoken,
+      isReel: true,
+    };
+    const gym: SourcePost = {
+      platform: "instagram",
+      sourceKey: "ig:gym-only",
+      url: "https://example.invalid/p/gym-only",
+      creditHandle: "someone",
+      caption: "Leg day done.",
+    };
+    const evaluated = await evaluatePosts([post, gym], [], async () => {
+      extracted += 1;
+      return { ok: false, kind: "not_a_recipe", error: "no method" };
+    });
+    assert.equal(extracted, 1);
+    assert.equal(evaluated[0]?.outcome, "dropped_not_a_recipe");
+    assert.equal(evaluated[1]?.outcome, "dropped_not_a_recipe");
+  });
+
+  it("names the actor when Apify returns an HTML page", () => {
+    assert.throws(
+      () => parseActorBody("<html>\r\n<h1>Bad gateway</h1>", 200, "streamers~youtube-scraper", "start"),
+      /streamers~youtube-scraper start returned non-JSON \(200\)/,
+    );
   });
 });
 

@@ -10,7 +10,8 @@ async function main() {
   console.log(formatSummary(report));
   console.log("\n--- json ---");
   console.log(JSON.stringify(report, null, 2));
-  if (!dry && report.errors.some((error) => /is not set|columns are missing/i.test(error))) {
+  const blocked = report.errors.some((error) => /is not set|columns are missing/i.test(error));
+  if (!dry && (blocked || (report.errors.length > 0 && report.selectedCount === 0))) {
     process.exitCode = 1;
   }
 }

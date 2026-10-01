@@ -123,6 +123,10 @@ export function formatSummary(report: ImportReport): string {
       `${row.selected ? "KEEP" : "skip"}  ${row.outcome.padEnd(22)} ${row.sourceKey.padEnd(22)}${title}${macros}${extra}`,
     );
   }
+  if (report.inserted?.length) {
+    lines.push("", "Images:");
+    for (const item of report.inserted) lines.push(`- ${item.sourceKey}: ${item.image}`);
+  }
   if (report.errors.length) {
     lines.push("", "Errors:");
     for (const error of report.errors) lines.push(`- ${error}`);

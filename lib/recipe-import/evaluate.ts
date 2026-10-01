@@ -1,4 +1,4 @@
-import { classifyPost } from "./classify";
+import { classifyPost, worthRewriting } from "./classify";
 import { findDuplicate, type LibraryEntry } from "./dedupe";
 import { selectWeekly } from "./select";
 import type { DraftRecipe, FilterResult, PostKind, SourcePost } from "./types";
@@ -50,7 +50,9 @@ export async function evaluatePosts(
   for (const post of posts) {
     const text = postText(post);
     const kind = classifyPost(text);
-    if (kind !== "recipe") {
+    // Spoken reels often fail the caption pattern. A long cooking transcript
+    // still goes to the rewriter. Promos and paywalls without one are dropped.
+    if (kind !== "recipe" && !worthRewriting(text, post.transcript)) {
       const outcome: Outcome =
         kind === "promo" ? "dropped_promo" : kind === "paywall" ? "dropped_paywall" : "dropped_not_a_recipe";
       evaluated.push({
