@@ -14,12 +14,44 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
   const id = typeof body?.id === "string" ? body.id : "";
-  const action = body?.action === "approve" || body?.action === "reject" ? body.action : null;
-  if (!id || !action) {
-    return NextResponse.json({ error: "id and action (approve or reject) are required" }, { status: 400 });
+  const action =
+    body?.action === "approve" || body?.action === "reject" || body?.action === "approve_clean" || body?.action === "edit"
+      ? body.action
+      : null;
+  if (!action || (action !== "approve_clean" && !id)) {
+    return NextResponse.json({ error: "id and action are required" }, { status: 400 });
   }
 
   const admin = createServiceClient();
+  if (action === "approve_clean") {
+    const { data, error } = await admin
+      .from("recipes")
+      .update({ published: true, import_status: "approved" })
+      .eq("published", false)
+      .eq("import_status", "draft")
+      .select("id");
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, published: true, count: data?.length ?? 0 });
+  }
+
+  if (action === "edit") {
+    const title = typeof body?.title === "string" ? body.title.trim() : "";
+    const category = typeof body?.category === "string" ? body.category : "";
+    if (!title || !["breakfast", "lunch", "dinner", "snack"].includes(category)) {
+      return NextResponse.json({ error: "title and category are required" }, { status: 400 });
+    }
+    const { data, error } = await admin
+      .from("recipes")
+      .update({ title, category })
+      .eq("id", id)
+      .eq("published", false)
+      .select("id")
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: "Draft not found" }, { status: 404 });
+    return NextResponse.json({ ok: true, published: false });
+  }
+
   if (action === "approve") {
     const { data, error } = await admin
       .from("recipes")

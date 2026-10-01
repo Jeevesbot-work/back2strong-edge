@@ -17,10 +17,16 @@ export const DEFAULT_CREATORS: CreatorLists = {
     "chlo_fitx",
     "beatthebudget",
     "emthenutritionist",
-    "scottbaptie",
     "thebodycoach",
     "sohonutrition",
     "justinanderson_fit",
+    // Breakfast and snack accounts that put the ingredients and method in the
+    // caption. scottbaptie is left off: the last live week was seven posts that
+    // all pointed at his paid recipe app.
+    "neill_in_vs_out_nutrition",
+    "_ryleefoster",
+    "strictlythriving",
+    "risewithteagan",
   ],
   youtube: ["@jalalsamfit", "@_aussiefitness", "@theremingtonjames"],
 };

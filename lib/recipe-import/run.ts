@@ -1,3 +1,4 @@
+import { formatCost, importCost, resetImportCost, type ImportCost } from "./cost";
 import { extractRecipe } from "./extract";
 import { evaluatePosts, type EvaluatedPost } from "./evaluate";
 import { FIXTURE_POSTS } from "./fixture";
@@ -46,6 +47,9 @@ export interface ImportReport {
   rows: ReportRow[];
   errors: string[];
   inserted?: Array<{ sourceKey: string; id: string; image: string }>;
+  imagesBackfilled?: number;
+  notification?: string;
+  cost?: ImportCost;
 }
 
 function toRow(item: EvaluatedPost): ReportRow {
@@ -127,6 +131,11 @@ export function formatSummary(report: ImportReport): string {
     lines.push("", "Images:");
     for (const item of report.inserted) lines.push(`- ${item.sourceKey}: ${item.image}`);
   }
+  if (report.imagesBackfilled) {
+    lines.push("", `Photos added to ${report.imagesBackfilled} existing draft(s).`);
+  }
+  if (report.notification) lines.push(report.notification);
+  if (report.cost) lines.push(formatCost(report.cost));
   if (report.errors.length) {
     lines.push("", "Errors:");
     for (const error of report.errors) lines.push(`- ${error}`);
@@ -137,12 +146,22 @@ export function formatSummary(report: ImportReport): string {
 export async function runRecipeImport(options: { dry: boolean }): Promise<ImportReport> {
   if (options.dry) return buildDryRunReport();
 
-  const { prepareLivePosts, loadLiveLibrary, insertDrafts, rewriteForImport } = await import("./live");
+  resetImportCost();
+  const { prepareLivePosts, loadLiveLibrary, insertDrafts, rewriteForImport, backfillDraftImages } = await import("./live");
+  const backfill = await backfillDraftImages().catch((err: unknown) => ({
+    filled: 0,
+    skipped: err instanceof Error ? err.message : "photo backfill failed",
+  }));
   const scraped = await prepareLivePosts();
   const library = await loadLiveLibrary();
   const evaluated = await evaluatePosts(scraped.posts, library, async (_post, text) => rewriteForImport(text));
   const rows = evaluated.map(toRow);
   const { inserted, errors } = await insertDrafts(evaluated);
+  const { notifyDraftsReady } = await import("./notify");
+  const notification = await notifyDraftsReady(inserted.length).catch((err: unknown) =>
+    err instanceof Error ? err.message : "notification failed",
+  );
+  const backfillNote = backfill.skipped ? `Photo backfill: ${backfill.skipped}` : "";
   return {
     mode: "live",
     wrote: inserted.length > 0,
@@ -154,7 +173,10 @@ export async function runRecipeImport(options: { dry: boolean }): Promise<Import
     considered: rows.length,
     selectedCount: rows.filter((row) => row.selected).length,
     rows,
-    errors: [...scraped.errors, ...errors],
+    errors: [...(backfillNote ? [backfillNote] : []), ...scraped.errors, ...errors],
     inserted,
+    imagesBackfilled: backfill.filled,
+    notification,
+    cost: importCost(),
   };
 }

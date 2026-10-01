@@ -18,6 +18,8 @@ export interface SourcePost {
   titleHint?: string | null;
 }
 
+export type Simplicity = "simple" | "ok" | "fiddly";
+
 export interface DraftRecipe {
   title: string;
   category: RecipeCategory;
@@ -34,6 +36,10 @@ export interface DraftRecipe {
   method: string[];
   tags: string[];
   coach_note: string | null;
+  /** Simple meals are chosen before fiddly ones when the week is full. */
+  simplicity: Simplicity;
+  /** Niche ingredients are dropped rather than saved as drafts. */
+  niche: boolean;
 }
 
 export type PostKind = "recipe" | "promo" | "paywall" | "not_a_recipe";

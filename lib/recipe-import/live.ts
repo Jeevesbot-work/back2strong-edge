@@ -1,11 +1,12 @@
 import { scrapeCreators } from "./apify";
 import { toDraftRow } from "./draft";
 import { evaluatePosts, type EvaluatedPost } from "./evaluate";
-import { generateRecipeImage } from "./images";
+import { generateRecipeImage, imageCreditsExhausted } from "./images";
 import type { LibraryEntry } from "./dedupe";
 import { rewriteRecipe } from "./rewrite";
 import { saveRecipeImage } from "@/lib/recipes/save-image";
 import { createServiceClient } from "@/lib/supabase/service";
+import type { DraftRecipe, RecipeCategory } from "./types";
 
 function asStrings(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -43,6 +44,7 @@ export async function insertDrafts(rows: EvaluatedPost[]): Promise<{ inserted: I
   const supabase = createServiceClient();
   const inserted: InsertedDraft[] = [];
   const errors: string[] = [];
+  let imagePause: string | null = null;
 
   for (const row of rows) {
     if (!row.selected || !row.recipe || !row.filter) continue;
@@ -60,19 +62,98 @@ export async function insertDrafts(rows: EvaluatedPost[]): Promise<{ inserted: I
     }
     const id = String(data.id);
     let image = "pending";
-    const generated = await generateRecipeImage(row.recipe);
-    if ("error" in generated) {
-      image = generated.error;
-      errors.push(`${row.post.sourceKey} saved without a photo: ${generated.error}`);
+    if (imagePause) {
+      image = imagePause;
     } else {
-      const saved = await saveRecipeImage(id, generated.base64, generated.mime);
-      image = saved.ok ? saved.url : saved.error;
-      if (!saved.ok) errors.push(`${row.post.sourceKey} saved without a photo: ${saved.error}`);
+      const generated = await generateRecipeImage(row.recipe);
+      if ("error" in generated) {
+        image = generated.error;
+        if (imageCreditsExhausted(generated.error)) {
+          imagePause = "image generation skipped: OpenAI has no credits yet";
+          errors.push(imagePause);
+        } else {
+          errors.push(`${row.post.sourceKey} saved without a photo: ${generated.error}`);
+        }
+      } else {
+        const saved = await saveRecipeImage(id, generated.base64, generated.mime);
+        image = saved.ok ? saved.url : saved.error;
+        if (!saved.ok) errors.push(`${row.post.sourceKey} saved without a photo: ${saved.error}`);
+      }
     }
     inserted.push({ sourceKey: row.post.sourceKey, id, image });
   }
 
   return { inserted, errors };
+}
+
+const CATEGORIES: RecipeCategory[] = ["breakfast", "lunch", "dinner", "snack"];
+
+function rowToRecipe(row: Record<string, unknown>): DraftRecipe | null {
+  const category = String(row.category ?? "");
+  if (!CATEGORIES.includes(category as RecipeCategory)) return null;
+  const title = String(row.title ?? "").trim();
+  if (!title) return null;
+  return {
+    title,
+    category: category as RecipeCategory,
+    description: String(row.description ?? title),
+    servings: Number(row.servings ?? 1) || 1,
+    prep_time_mins: row.prep_time_mins == null ? null : Number(row.prep_time_mins),
+    cook_time_mins: row.cook_time_mins == null ? null : Number(row.cook_time_mins),
+    calories: Number(row.calories ?? 0),
+    protein_g: Number(row.protein_g ?? 0),
+    carbs_g: Number(row.carbs_g ?? 0),
+    fat_g: Number(row.fat_g ?? 0),
+    ingredients: asStrings(row.ingredients),
+    method: asStrings(row.method),
+    tags: asStrings(row.tags),
+    coach_note: null,
+    simplicity: "ok",
+    niche: false,
+  };
+}
+
+export interface ImageBackfill {
+  filled: number;
+  skipped: string | null;
+}
+
+/** Photos for unpublished drafts that were saved before image credit was available. */
+export async function backfillDraftImages(): Promise<ImageBackfill> {
+  if (!process.env.OPENAI_API_KEY) {
+    return { filled: 0, skipped: "OPENAI_API_KEY is not set, so existing drafts were left without photos" };
+  }
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("recipes")
+    .select("id, title, category, description, servings, prep_time_mins, cook_time_mins, calories, protein_g, carbs_g, fat_g, ingredients, method, tags, image_url, published, import_status")
+    .eq("published", false)
+    .in("import_status", ["draft", "flagged"])
+    .order("imported_at", { ascending: true });
+  if (error) return { filled: 0, skipped: error.message };
+
+  const pending = (data ?? []).filter((row) => !row.image_url);
+  let filled = 0;
+  let skipped: string | null = null;
+  for (const row of pending) {
+    const recipe = rowToRecipe(row);
+    if (!recipe) continue;
+    const generated = await generateRecipeImage(recipe);
+    if ("error" in generated) {
+      if (imageCreditsExhausted(generated.error)) {
+        return { filled, skipped: "OpenAI has no credits yet, so the photo backfill stopped" };
+      }
+      skipped = skipped ?? generated.error;
+      continue;
+    }
+    const saved = await saveRecipeImage(String(row.id), generated.base64, generated.mime);
+    if (!saved.ok) {
+      skipped = skipped ?? saved.error;
+      continue;
+    }
+    filled += 1;
+  }
+  return { filled, skipped };
 }
 
 export async function prepareLivePosts(): Promise<{ posts: Awaited<ReturnType<typeof scrapeCreators>>["posts"]; errors: string[] }> {

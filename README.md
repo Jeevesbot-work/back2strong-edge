@@ -32,6 +32,10 @@ Nothing is published automatically. The migration is not applied by the job.
 
 Default list: `lib/recipe-import/creators.ts` (Instagram and YouTube handles). Override without a code change by setting `RECIPE_CREATORS_JSON` to `{"instagram":["handle"],"youtube":["@handle"]}`.
 
+Reels that name a dish or show macros but do not write the method get a transcript from `apify/instagram-reel-scraper` (`includeTranscript`), capped at 12 a run, and that transcript is sent to Claude. Posts that point at an app, ebook, or "comment for the recipe" are skipped. The rewriter prefers simple family meals (about 10 ingredients, 30 minutes, UK names) and tags them `quick`, `batch-cook`, or `family`. Fiddly recipes lose out when the week is already full. Niche ingredients are dropped.
+
+Each live run first adds photos to unpublished drafts that have no `image_url`. If OpenAI has no credit, that step stops and the drafts stay. When new drafts are saved, the same Resend sender used for audits emails `nick@back2strong.online` with "N new recipes ready" and a link to `/admin/recipes`. That needs `RESEND_API_KEY` on the GitHub Action. Push notifications in this app go to clients, not the admin.
+
 ### What gets kept
 
 Per-serving rules live in `lib/recipe-import/thresholds.ts`.

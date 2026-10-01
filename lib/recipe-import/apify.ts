@@ -1,4 +1,5 @@
-import { hasRecipeBody } from "./classify";
+import { addApifyUsd } from "./cost";
+import { captionHasDishName, captionHasMacros, captionHasMethod, classifyPost, hasRecipeBody } from "./classify";
 import {
   getCreators,
   INSTAGRAM_RESULTS_LIMIT,
@@ -55,14 +56,36 @@ function stripCueTiming(raw: string): string {
 }
 
 function isReel(item: Record<string, unknown>): boolean {
-  const product = pickString(item, ["productType", "product_type"]).toLowerCase();
-  if (product === "clips") return true;
+  const product = pickString(item, ["productType", "product_type", "type"]).toLowerCase();
+  if (product === "clips" || product === "reel" || product === "video") return true;
   const url = pickString(item, ["url", "inputUrl"]);
-  return url.includes("/reel/");
+  if (url.includes("/reel/")) return true;
+  return typeof item.videoUrl === "string" || typeof item.video_url === "string";
 }
 
+/** Reels whose caption names the dish or shows macros, but does not write the method. */
+export const MAX_REEL_TRANSCRIPTS = 12;
+
 export function needsReelTranscript(post: SourcePost): boolean {
-  return post.platform === "instagram" && !!post.isReel && !hasRecipeBody(post.caption || "");
+  if (post.platform !== "instagram" || !post.isReel) return false;
+  const caption = post.caption || "";
+  if (captionHasMethod(caption)) return false;
+  const kind = classifyPost(caption);
+  if ((kind === "paywall" || kind === "promo") && !hasRecipeBody(caption)) return false;
+  return captionHasMacros(caption) || captionHasDishName(caption);
+}
+
+export function selectTranscriptTargets(posts: SourcePost[], cap = MAX_REEL_TRANSCRIPTS): SourcePost[] {
+  return posts
+    .filter(needsReelTranscript)
+    .map((post, index) => ({
+      post,
+      index,
+      score: (captionHasMacros(post.caption || "") ? 2 : 0) + (captionHasDishName(post.caption || "") ? 1 : 0),
+    }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, cap)
+    .map((item) => item.post);
 }
 
 export function instagramItemsToPosts(items: Array<Record<string, unknown>>): SourcePost[] {
@@ -162,6 +185,7 @@ async function runActor(actor: string, input: unknown): Promise<Array<Record<str
   if (!runId || !datasetId) throw new Error(`Apify ${actor} returned no run id`);
 
   let status = typeof run?.status === "string" ? run.status : "READY";
+  let spent = usageUsd(run);
   const deadline = Date.now() + RUN_TIMEOUT_MS;
   while (!["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"].includes(status)) {
     if (Date.now() > deadline) throw new Error(`Apify ${actor} timed out after 8 minutes`);
@@ -170,13 +194,24 @@ async function runActor(actor: string, input: unknown): Promise<Array<Record<str
     const poll = asRecord(await readActorJson(pollRes, actor, "poll"));
     const data = asRecord(poll?.data);
     status = typeof data?.status === "string" ? data.status : "FAILED";
+    spent = usageUsd(data) || spent;
   }
+  addApifyUsd(spent);
   if (status !== "SUCCEEDED") throw new Error(`Apify ${actor} ended with ${status}`);
 
   const itemsRes = await fetch(`${API}/datasets/${datasetId}/items?clean=true&format=json&limit=500`, { headers });
   const items = await readActorJson(itemsRes, actor, "items");
   if (!Array.isArray(items)) return [];
   return items.map((item) => asRecord(item)).filter((item): item is Record<string, unknown> => !!item);
+}
+
+function usageUsd(data: Record<string, unknown> | null): number {
+  if (!data) return 0;
+  const direct = data.usageTotalUsd;
+  if (typeof direct === "number") return direct;
+  const usage = asRecord(data.usage);
+  const nested = usage?.usageTotalUsd ?? usage?.USD;
+  return typeof nested === "number" ? nested : 0;
 }
 
 function youtubeInput(handle: string, subtitlesFormat: "plaintext" | "srt") {
@@ -210,7 +245,7 @@ export async function scrapeCreators(): Promise<{ posts: SourcePost[]; errors: s
     errors.push(err instanceof Error ? err.message : "Instagram scrape failed");
   }
 
-  const reelUrls = posts.filter(needsReelTranscript).map((post) => post.url);
+  const reelUrls = selectTranscriptTargets(posts).map((post) => post.url);
   if (reelUrls.length > 0) {
     try {
       const reels = await runActor("apify~instagram-reel-scraper", {

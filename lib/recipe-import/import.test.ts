@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mergeReelTranscripts, needsReelTranscript, parseActorBody, subtitlesToText } from "./apify";
+import { MAX_REEL_TRANSCRIPTS, mergeReelTranscripts, needsReelTranscript, parseActorBody, selectTranscriptTargets, subtitlesToText } from "./apify";
 import { classifyPost, hasRecipeBody, worthRewriting } from "./classify";
+import { toUk } from "./ease";
+import { imageCreditsExhausted } from "./images";
 import { evaluatePosts } from "./evaluate";
 import { contentFingerprint, findDuplicate, titleSimilarity } from "./dedupe";
 import { toDraftRow } from "./draft";
@@ -83,7 +85,7 @@ describe("classify and extract", () => {
       sourceKey: "ig:ABC123",
       url: "https://www.instagram.com/reel/ABC123/",
       creditHandle: "someone",
-      caption: "Lunch idea. Grams are in the voiceover.",
+      caption: "Chicken fried rice. The grams are in the voiceover.",
       isReel: true,
     };
     assert.equal(hasRecipeBody(reel.caption), false);
@@ -131,6 +133,43 @@ describe("classify and extract", () => {
     assert.equal(extracted, 1);
     assert.equal(evaluated[0]?.outcome, "dropped_not_a_recipe");
     assert.equal(evaluated[1]?.outcome, "dropped_not_a_recipe");
+  });
+
+  it("fetches a spoken method for a dish caption, and caps the batch", () => {
+    assert.equal(classifyPost("The full recipe is in my recipe book. Comment BOOK and I'll send the link."), "paywall");
+    const spoken: SourcePost = {
+      platform: "instagram",
+      sourceKey: "ig:spoken",
+      url: "https://www.instagram.com/reel/spoken/",
+      creditHandle: "someone",
+      caption: "Honey garlic chicken\nCalories: 520\nProtein: 45g",
+      isReel: true,
+    };
+    const written: SourcePost = {
+      ...spoken,
+      sourceKey: "ig:written",
+      caption: `${spoken.caption}\nMethod\nHeat the pan.\nCook the chicken until it is done.`,
+    };
+    assert.equal(needsReelTranscript(spoken), true);
+    assert.equal(needsReelTranscript(written), false);
+    assert.equal(
+      worthRewriting(spoken.caption, "Cook the chicken in the pan for twenty minutes, then rest it and slice it before serving."),
+      true,
+    );
+    assert.equal(toUk("1 zucchini, cilantro and ground turkey"), "1 courgette, coriander and turkey mince");
+    assert.equal(imageCreditsExhausted("image generation failed (429): insufficient_quota"), true);
+
+    const many = Array.from({ length: MAX_REEL_TRANSCRIPTS + 3 }, (_, index) => ({
+      platform: "instagram" as const,
+      sourceKey: `ig:reel-${index}`,
+      url: `https://www.instagram.com/reel/reel-${index}/`,
+      creditHandle: "someone",
+      caption: index === MAX_REEL_TRANSCRIPTS + 2 ? "Protein oats\nCalories: 420\nProtein: 32g" : "Chicken wrap",
+      isReel: true,
+    }));
+    const picked = selectTranscriptTargets(many);
+    assert.equal(picked.length, MAX_REEL_TRANSCRIPTS);
+    assert.equal(picked[0]?.sourceKey, `ig:reel-${MAX_REEL_TRANSCRIPTS + 2}`);
   });
 
   it("names the actor when Apify returns an HTML page", () => {
@@ -218,5 +257,21 @@ describe("weekly mix", () => {
     const snackIds = picked.filter((item) => item.category === "snack").map((item) => item.id);
     assert.deepEqual(snackIds, ["a", "b"]);
     assert.deepEqual(overflow.map((item) => item.id), ["flag"]);
+  });
+
+  it("keeps a simple meal ahead of a fiddly one", () => {
+    const items = [
+      { id: "fiddly", category: "snack" as const, decision: "pass" as const, protein_g: 40, simplicity: "fiddly" as const },
+      { id: "simple", category: "snack" as const, decision: "pass" as const, protein_g: 16, simplicity: "simple" as const },
+      { id: "simple2", category: "snack" as const, decision: "pass" as const, protein_g: 18, simplicity: "simple" as const },
+    ];
+    const { picked } = selectWeekly([
+      ...Array.from({ length: 2 }, (_, index) => ({ id: `b${index}`, category: "breakfast" as const, decision: "pass" as const, protein_g: 30 })),
+      ...Array.from({ length: 3 }, (_, index) => ({ id: `l${index}`, category: "lunch" as const, decision: "pass" as const, protein_g: 40 })),
+      ...Array.from({ length: 3 }, (_, index) => ({ id: `d${index}`, category: "dinner" as const, decision: "pass" as const, protein_g: 40 })),
+      ...items,
+    ]);
+    assert.equal(picked.some((item) => item.id === "simple"), true);
+    assert.equal(picked.some((item) => item.id === "fiddly"), false);
   });
 });

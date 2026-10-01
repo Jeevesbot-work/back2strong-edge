@@ -1,6 +1,6 @@
 import type { RecipeCategory } from "@/lib/recipes-live";
 import { CATEGORY_ORDER } from "@/lib/recipes-live";
-import type { FilterDecision } from "./types";
+import type { FilterDecision, Simplicity } from "./types";
 
 /** About ten recipes a week, mixed across the four Fuel categories. */
 export const WEEKLY_TARGET = 10;
@@ -16,6 +16,7 @@ export interface Selectable {
   category: RecipeCategory;
   decision: Extract<FilterDecision, "pass" | "flag">;
   protein_g: number;
+  simplicity?: Simplicity;
 }
 
 /**
@@ -24,8 +25,11 @@ export interface Selectable {
  * fill the remaining slots up to WEEKLY_TARGET.
  */
 export function selectWeekly<T extends Selectable>(items: T[]): { picked: T[]; overflow: T[] } {
+  const ease = (item: T) => (item.simplicity === "fiddly" ? 2 : item.simplicity === "ok" ? 1 : 0);
   const rank = (a: T, b: T) => {
     if (a.decision !== b.decision) return a.decision === "pass" ? -1 : 1;
+    const byEase = ease(a) - ease(b);
+    if (byEase !== 0) return byEase;
     return b.protein_g - a.protein_g;
   };
 

@@ -1,4 +1,5 @@
 import type { RecipeCategory } from "@/lib/recipes-live";
+import { finishDraft } from "./ease";
 import { normaliseIngredientLine, normaliseMethodStep } from "./ingredients";
 import type { DraftRecipe } from "./types";
 
@@ -104,7 +105,7 @@ export function extractRecipe(text: string, titleHint?: string | null): DraftRec
   }
   if (ingredients.length < 3 || method.length < 2) return null;
 
-  return {
+  return finishDraft({
     title,
     category,
     description: `${title}. A ${category} with ${Math.round(protein)}g of protein a serving.`,
@@ -119,5 +120,7 @@ export function extractRecipe(text: string, titleHint?: string | null): DraftRec
     method,
     tags: tagsFor(ingredients, Math.round(servings)),
     coach_note: null,
-  };
+    simplicity: "ok",
+    niche: false,
+  });
 }

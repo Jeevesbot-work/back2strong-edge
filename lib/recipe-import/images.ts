@@ -1,4 +1,9 @@
+import { addImageAttempt } from "./cost";
 import type { DraftRecipe } from "./types";
+
+export function imageCreditsExhausted(error: string): boolean {
+  return /insufficient_quota|credit_balance|no credits|billing|429/i.test(error);
+}
 
 export interface GeneratedImage {
   base64: string;
@@ -38,18 +43,24 @@ export async function generateRecipeImage(recipe: DraftRecipe): Promise<Generate
 
   if (!res.ok) {
     const detail = (await res.text()).slice(0, 240);
+    addImageAttempt(false);
     return { error: `image generation failed (${res.status}): ${detail}` };
   }
 
   const body = (await res.json()) as { data?: Array<{ b64_json?: string; url?: string }> };
   const first = body.data?.[0];
-  if (first?.b64_json) return { base64: first.b64_json, mime: "image/jpeg" };
+  if (first?.b64_json) {
+    addImageAttempt(true);
+    return { base64: first.b64_json, mime: "image/jpeg" };
+  }
   if (first?.url) {
     const image = await fetch(first.url);
     if (!image.ok) return { error: "image host returned no file" };
     const bytes = Buffer.from(await image.arrayBuffer());
     const mime = image.headers.get("content-type") || "image/jpeg";
+    addImageAttempt(true);
     return { base64: bytes.toString("base64"), mime };
   }
+  addImageAttempt(false);
   return { error: "image generation returned no file" };
 }

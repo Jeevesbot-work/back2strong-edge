@@ -8,6 +8,7 @@ export type Outcome =
   | "dropped_promo"
   | "dropped_paywall"
   | "dropped_not_a_recipe"
+  | "dropped_niche"
   | "extract_failed"
   | "rejected_filter"
   | "duplicate"
@@ -106,6 +107,21 @@ export async function evaluatePosts(
     }
 
     const recipe = extracted.recipe;
+    if (recipe.niche) {
+      evaluated.push({
+        post,
+        classification: "recipe",
+        recipe,
+        filter: null,
+        duplicateOf: null,
+        duplicateReason: null,
+        selected: false,
+        outcome: "dropped_niche",
+        note: "niche ingredients",
+      });
+      continue;
+    }
+
     const filter = filterRecipe({
       category: recipe.category,
       calories: recipe.calories,
@@ -173,6 +189,7 @@ export async function evaluatePosts(
       category: row.recipe!.category,
       decision: row.filter!.decision as "pass" | "flag",
       protein_g: row.recipe!.protein_g,
+      simplicity: row.recipe!.simplicity,
     })),
   );
   const pickedSet = new Set(picked.map((item) => item.row));
