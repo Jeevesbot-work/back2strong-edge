@@ -1,0 +1,156 @@
+import { extractRecipe } from "./extract";
+import { evaluatePosts, type EvaluatedPost } from "./evaluate";
+import { FIXTURE_POSTS } from "./fixture";
+import { bundledLibrary } from "./library";
+import { CATEGORY_QUOTA, WEEKLY_TARGET } from "./select";
+import { sourceCredit } from "./draft";
+import { THRESHOLDS } from "./thresholds";
+import type { ExtractResult } from "./evaluate";
+
+export interface ReportRow {
+  sourceKey: string;
+  platform: string;
+  credit: string;
+  url: string;
+  transcriptUsed: boolean;
+  classification: string;
+  title: string | null;
+  category: string | null;
+  servings: number | null;
+  prep_time_mins: number | null;
+  cook_time_mins: number | null;
+  calories: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+  ingredients: string[] | null;
+  method: string[] | null;
+  tags: string[] | null;
+  filter: { decision: string; reasons: string[] } | null;
+  duplicateOf: string | null;
+  selected: boolean;
+  outcome: string;
+  note: string | null;
+}
+
+export interface ImportReport {
+  mode: "dry-run" | "live";
+  wrote: boolean;
+  publishesAutomatically: false;
+  library: "bundled-sample" | "supabase";
+  weeklyTarget: number;
+  quotas: typeof CATEGORY_QUOTA;
+  thresholds: typeof THRESHOLDS;
+  considered: number;
+  selectedCount: number;
+  rows: ReportRow[];
+  errors: string[];
+  inserted?: Array<{ sourceKey: string; id: string; image: string }>;
+}
+
+function toRow(item: EvaluatedPost): ReportRow {
+  const recipe = item.recipe;
+  return {
+    sourceKey: item.post.sourceKey,
+    platform: item.post.platform,
+    credit: sourceCredit(item.post),
+    url: item.post.url,
+    transcriptUsed: !!item.post.transcript?.trim(),
+    classification: item.classification,
+    title: recipe?.title ?? null,
+    category: recipe?.category ?? null,
+    servings: recipe?.servings ?? null,
+    prep_time_mins: recipe?.prep_time_mins ?? null,
+    cook_time_mins: recipe?.cook_time_mins ?? null,
+    calories: recipe?.calories ?? null,
+    protein_g: recipe?.protein_g ?? null,
+    carbs_g: recipe?.carbs_g ?? null,
+    fat_g: recipe?.fat_g ?? null,
+    ingredients: recipe?.ingredients ?? null,
+    method: recipe?.method ?? null,
+    tags: recipe?.tags ?? null,
+    filter: item.filter,
+    duplicateOf: item.duplicateOf,
+    selected: item.selected,
+    outcome: item.outcome,
+    note: item.note,
+  };
+}
+
+async function parseFixture(_post: unknown, text: string): Promise<ExtractResult> {
+  const recipe = extractRecipe(text);
+  if (!recipe) return { ok: false, error: "could not parse servings, ingredients, macros, and method" };
+  return { ok: true, recipe };
+}
+
+export async function buildDryRunReport(): Promise<ImportReport> {
+  const evaluated = await evaluatePosts(FIXTURE_POSTS, bundledLibrary(), parseFixture);
+  const rows = evaluated.map(toRow);
+  return {
+    mode: "dry-run",
+    wrote: false,
+    publishesAutomatically: false,
+    library: "bundled-sample",
+    weeklyTarget: WEEKLY_TARGET,
+    quotas: CATEGORY_QUOTA,
+    thresholds: THRESHOLDS,
+    considered: rows.length,
+    selectedCount: rows.filter((row) => row.selected).length,
+    rows,
+    errors: [],
+  };
+}
+
+export function formatSummary(report: ImportReport): string {
+  const counts = new Map<string, number>();
+  for (const row of report.rows) counts.set(row.outcome, (counts.get(row.outcome) ?? 0) + 1);
+  const outcomeBits: string[] = [];
+  counts.forEach((count, name) => outcomeBits.push(`${name} ${count}`));
+  const lines = [
+    report.mode === "dry-run"
+      ? "Dry run. Nothing was written. Drafts are never published automatically."
+      : `Live import. ${report.inserted?.length ?? 0} unpublished draft(s) written. Nothing was published.`,
+    `Library: ${report.library === "bundled-sample" ? "bundled sample in lib/recipes.ts (live mode reads public.recipes)" : "public.recipes"}.`,
+    `${report.considered} posts considered. ${report.selectedCount} selected for the week (target ${report.weeklyTarget}).`,
+    `Outcomes: ${outcomeBits.join(", ") || "none"}.`,
+    "",
+  ];
+  for (const row of report.rows) {
+    const macros = row.calories == null ? "" : ` ${row.calories} kcal, ${row.protein_g}p/${row.carbs_g}c/${row.fat_g}f`;
+    const title = row.title ? ` ${row.title}` : "";
+    const extra = row.duplicateOf ? ` duplicate of "${row.duplicateOf}"` : row.note ? ` — ${row.note}` : "";
+    lines.push(
+      `${row.selected ? "KEEP" : "skip"}  ${row.outcome.padEnd(22)} ${row.sourceKey.padEnd(22)}${title}${macros}${extra}`,
+    );
+  }
+  if (report.errors.length) {
+    lines.push("", "Errors:");
+    for (const error of report.errors) lines.push(`- ${error}`);
+  }
+  return lines.join("\n");
+}
+
+export async function runRecipeImport(options: { dry: boolean }): Promise<ImportReport> {
+  if (options.dry) return buildDryRunReport();
+
+  const { prepareLivePosts, loadLiveLibrary, insertDrafts, rewriteForImport } = await import("./live");
+  const scraped = await prepareLivePosts();
+  const library = await loadLiveLibrary();
+  const evaluated = await evaluatePosts(scraped.posts, library, async (_post, text) => rewriteForImport(text));
+  const rows = evaluated.map(toRow);
+  const { inserted, errors } = await insertDrafts(evaluated);
+  return {
+    mode: "live",
+    wrote: inserted.length > 0,
+    publishesAutomatically: false,
+    library: "supabase",
+    weeklyTarget: WEEKLY_TARGET,
+    quotas: CATEGORY_QUOTA,
+    thresholds: THRESHOLDS,
+    considered: rows.length,
+    selectedCount: rows.filter((row) => row.selected).length,
+    rows,
+    errors: [...scraped.errors, ...errors],
+    inserted,
+  };
+}
