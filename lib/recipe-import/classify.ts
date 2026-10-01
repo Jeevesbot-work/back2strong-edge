@@ -3,7 +3,7 @@ import type { PostKind } from "./types";
 const INGREDIENT_UNIT =
   /\d+(?:[./]\d+)?\s*(?:kilograms?|grams?|kg|g|millilitres?|milliliters?|ml|litres?|liters?|l|tablespoons?|teaspoons?|tbsp|tsp|cups?)\b/gi;
 const PAYWALL_RE =
-  /full recipe[\s\S]{0,60}(app|membership|patreon|ebook|e-book|recipe book|book|guide)|unlock the (full )?recipe|recipe is (only |behind )?(in|on) (my |the )?(app|membership|book|ebook)|comment\s+[‘'"]?[a-z0-9]{2,}[’'"]?\s+(and |to )?(get|for|i['’]ll send)|\brecipe book\b/i;
+  /full recipe[\s\S]{0,80}(app|membership|patreon|ebook|e-book|recipe book|book|guide|site|website)|recipe (?:is )?on my (?:site|website|blog)|unlock the (full )?recipe|recipe is (only |behind )?(in|on) (my |the )?(app|membership|book|ebook|site|website)|comment\s+[‘'"]?[a-z0-9]{2,}[’'"]?\s+(and |to )?(get|for|i['’]ll send)|comment\s+(app|yum|meals)\b|\brecipe book\b|\bpaid app\b/i;
 const DISH_NAME =
   /\b(oats?|pancake|muffin|waffle|yogh?urt|skyr|smoothie|omelette|scrambled eggs|porridge|granola|chicken|turkey|beef mince|salmon|cod|prawn|tofu|burrito|tacos?|pitta|pita|flatbread|pizza|brownie|protein bars?|salad|soup|curry|noodles|pasta|wraps?|toast|frittata|egg bites?|cheesecake|overnight)\b/i;
 const PROMO_RE =

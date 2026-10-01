@@ -1,12 +1,18 @@
+import { hasRecipeBody } from "./classify";
+import { formatCreatorRates, creatorRates } from "./creator-stats";
 import { formatCost, importCost, resetImportCost, type ImportCost } from "./cost";
+import { DEFAULT_CREATORS } from "./creators";
 import { extractRecipe } from "./extract";
 import { evaluatePosts, type EvaluatedPost } from "./evaluate";
 import { FIXTURE_POSTS } from "./fixture";
 import { bundledLibrary } from "./library";
+import { generateOriginals } from "./originals";
 import { CATEGORY_QUOTA, WEEKLY_TARGET } from "./select";
+import { originalSlots } from "./slots";
 import { sourceCredit } from "./draft";
 import { THRESHOLDS } from "./thresholds";
 import type { ExtractResult } from "./evaluate";
+import type { RecipeCategory } from "./types";
 
 export interface ReportRow {
   sourceKey: string;
@@ -32,6 +38,9 @@ export interface ReportRow {
   selected: boolean;
   outcome: string;
   note: string | null;
+  handle: string;
+  fullCaption: boolean;
+  transcriptSource: string | null;
 }
 
 export interface ImportReport {
@@ -78,6 +87,9 @@ function toRow(item: EvaluatedPost): ReportRow {
     selected: item.selected,
     outcome: item.outcome,
     note: item.note,
+    handle: item.post.creditHandle,
+    fullCaption: hasRecipeBody(item.post.caption || ""),
+    transcriptSource: item.post.transcriptSource ?? null,
   };
 }
 
@@ -135,6 +147,24 @@ export function formatSummary(report: ImportReport): string {
     lines.push("", `Photos added to ${report.imagesBackfilled} existing draft(s).`);
   }
   if (report.notification) lines.push(report.notification);
+  const rates = creatorRates(
+    report.rows.map((row) => ({
+      platform: row.platform as "instagram" | "youtube" | "b2s",
+      handle: row.handle,
+      fullCaption: row.fullCaption,
+      passed: row.filter?.decision === "pass",
+    })),
+  );
+  const rateLines = formatCreatorRates(rates);
+  if (rateLines.length) lines.push("", ...rateLines);
+  const skipped = DEFAULT_CREATORS.instagram.filter((creator) => creator.weight <= 0).map((creator) => `@${creator.handle}`);
+  if (skipped.length) lines.push(`Skipped this run (weight 0): ${skipped.join(", ")}.`);
+  const borrowed = report.rows.filter((row) => row.transcriptSource === "youtube").length;
+  const paid = report.rows.filter((row) => row.transcriptSource === "instagram").length;
+  if (borrowed || paid) lines.push(`Transcripts: ${borrowed} from YouTube subtitles, ${paid} from Instagram reels.`);
+  const originals = report.rows.filter((row) => row.selected && row.platform === "b2s").length;
+  const creatorKept = report.rows.filter((row) => row.selected && row.platform !== "b2s").length;
+  if (report.mode === "live") lines.push(`Kept ${creatorKept} from creators and ${originals} Back2Strong originals.`);
   if (report.cost) lines.push(formatCost(report.cost));
   if (report.errors.length) {
     lines.push("", "Errors:");
@@ -148,13 +178,34 @@ export async function runRecipeImport(options: { dry: boolean }): Promise<Import
 
   resetImportCost();
   const { prepareLivePosts, loadLiveLibrary, insertDrafts, rewriteForImport, backfillDraftImages } = await import("./live");
+  const { leanSwapRecipe } = await import("./lean-swap");
   const backfill = await backfillDraftImages().catch((err: unknown) => ({
     filled: 0,
     skipped: err instanceof Error ? err.message : "photo backfill failed",
   }));
   const scraped = await prepareLivePosts();
   const library = await loadLiveLibrary();
-  const evaluated = await evaluatePosts(scraped.posts, library, async (_post, text) => rewriteForImport(text));
+  const evaluated = await evaluatePosts(scraped.posts, library, async (_post, text) => rewriteForImport(text), {
+    pad: false,
+    leanSwap: leanSwapRecipe,
+    checkMacros: true,
+  });
+  for (const row of evaluated) {
+    if (!row.selected || row.filter?.decision !== "flag") continue;
+    if (row.recipe?.category !== "breakfast" && row.recipe?.category !== "snack") continue;
+    row.selected = false;
+    row.outcome = "over_cap";
+    row.note = "held back so a Back2Strong original can fill this breakfast or snack slot";
+  }
+  const counts: Record<RecipeCategory, number> = { breakfast: 0, lunch: 0, dinner: 0, snack: 0 };
+  for (const row of evaluated) {
+    if (row.selected && row.recipe) counts[row.recipe.category] += 1;
+  }
+  const originals = await generateOriginals(
+    originalSlots(counts),
+    [...library.map((entry) => entry.title), ...evaluated.map((row) => row.recipe?.title ?? "")].filter(Boolean),
+  );
+  evaluated.push(...originals.posts);
   const rows = evaluated.map(toRow);
   const { inserted, errors } = await insertDrafts(evaluated);
   const { notifyDraftsReady } = await import("./notify");
@@ -173,7 +224,7 @@ export async function runRecipeImport(options: { dry: boolean }): Promise<Import
     considered: rows.length,
     selectedCount: rows.filter((row) => row.selected).length,
     rows,
-    errors: [...(backfillNote ? [backfillNote] : []), ...scraped.errors, ...errors],
+    errors: [...(backfillNote ? [backfillNote] : []), ...scraped.errors, ...originals.errors, ...errors],
     inserted,
     imagesBackfilled: backfill.filled,
     notification,

@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { MAX_REEL_TRANSCRIPTS, mergeReelTranscripts, needsReelTranscript, parseActorBody, selectTranscriptTargets, subtitlesToText } from "./apify";
+import { borrowYoutubeTranscripts, MAX_REEL_TRANSCRIPTS, mergeReelTranscripts, needsReelTranscript, parseActorBody, selectTranscriptTargets, subtitlesToText, titlesOverlap } from "./apify";
+import { creatorRates } from "./creator-stats";
+import { activeCreators, DEFAULT_CREATORS, postsPerCreator } from "./creators";
+import { isLeanSwapCandidate } from "./lean-swap";
+import { calculateFromIngredients, macroMismatch, statedMacroMismatch } from "./nutrition";
+import { originalSlots } from "./slots";
+import { sourceCredit } from "./draft";
 import { classifyPost, hasRecipeBody, worthRewriting } from "./classify";
 import { toUk } from "./ease";
 import { imageCreditsExhausted } from "./images";
 import { evaluatePosts } from "./evaluate";
 import { contentFingerprint, findDuplicate, titleSimilarity } from "./dedupe";
 import { toDraftRow } from "./draft";
+import type { DraftRecipe } from "./types";
 import { extractRecipe } from "./extract";
 import { FIXTURE_POSTS } from "./fixture";
 import { buildShoppingList } from "../shopping-list";
@@ -273,5 +280,188 @@ describe("weekly mix", () => {
     ]);
     assert.equal(picked.some((item) => item.id === "simple"), true);
     assert.equal(picked.some((item) => item.id === "fiddly"), false);
+  });
+
+  it("prefers a higher-weight creator when the meal is otherwise equal", () => {
+    const fill = (category: "breakfast" | "lunch" | "dinner", count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        id: `${category}-${index}`,
+        category,
+        decision: "pass" as const,
+        protein_g: 40,
+      }));
+    const { picked } = selectWeekly([
+      ...fill("breakfast", 2),
+      ...fill("lunch", 3),
+      ...fill("dinner", 3),
+      { id: "high", category: "snack" as const, decision: "pass" as const, protein_g: 16, weight: 3 },
+      { id: "low", category: "snack" as const, decision: "pass" as const, protein_g: 40, weight: 1 },
+      { id: "low2", category: "snack" as const, decision: "pass" as const, protein_g: 30, weight: 1 },
+    ]);
+    const snackIds = picked.filter((item) => item.category === "snack").map((item) => item.id);
+    assert.deepEqual(snackIds, ["high", "low"]);
+  });
+
+  it("does not pad past the category quotas when originals will fill the week", () => {
+    const lunches = Array.from({ length: 5 }, (_, index) => ({
+      id: `lunch-${index}`,
+      category: "lunch" as const,
+      decision: "pass" as const,
+      protein_g: 40,
+    }));
+    const { picked } = selectWeekly(lunches, { pad: false });
+    assert.equal(picked.length, 3);
+  });
+});
+
+describe("sourcing mix", () => {
+  it("weights full-caption creators above gated ones", () => {
+    const neill = DEFAULT_CREATORS.instagram.find((creator) => creator.handle === "neill_in_vs_out_nutrition");
+    const jalal = DEFAULT_CREATORS.instagram.find((creator) => creator.handle === "jalalsamfit");
+    const chlo = DEFAULT_CREATORS.instagram.find((creator) => creator.handle === "chlo_fitx");
+    const gated = DEFAULT_CREATORS.instagram.find((creator) => creator.handle === "risewithteagan");
+    assert.equal(neill?.weight, 3);
+    assert.equal(jalal?.weight, 3);
+    assert.equal(chlo?.weight, 1);
+    assert.equal(gated?.weight, 0);
+    assert.equal(postsPerCreator(3), 6);
+    assert.equal(postsPerCreator(0), 0);
+    assert.equal(
+      activeCreators().instagram.some((creator) => creator.handle === "risewithteagan"),
+      false,
+    );
+  });
+
+  it("uses a free YouTube subtitle before paying for an Instagram transcript", () => {
+    const reel: SourcePost = {
+      platform: "instagram",
+      sourceKey: "ig:honey",
+      url: "https://www.instagram.com/reel/honey/",
+      creditHandle: "jalalsamfit",
+      caption: "Honey garlic chicken\nCalories: 520\nProtein: 45g",
+      isReel: true,
+    };
+    const video: SourcePost = {
+      platform: "youtube",
+      sourceKey: "yt:honey",
+      url: "https://www.youtube.com/watch?v=honey",
+      creditHandle: "Jalalsamfit",
+      caption: "",
+      titleHint: "Honey Garlic Chicken",
+      transcript: "Slice the chicken breast and cook it until it is done.",
+    };
+    assert.equal(titlesOverlap(reel.caption, video.titleHint ?? ""), true);
+    const [borrowed] = borrowYoutubeTranscripts([reel, video]);
+    assert.equal(borrowed?.transcriptSource, "youtube");
+    assert.match(borrowed?.transcript ?? "", /chicken breast/);
+    assert.equal(needsReelTranscript(borrowed!), false);
+    assert.equal(MAX_REEL_TRANSCRIPTS, 10);
+  });
+
+  it("skips comment-for-recipe and recipe-on-my-site posts, and keeps a full caption", () => {
+    assert.equal(classifyPost("Comment YUM and I'll send it over."), "paywall");
+    assert.equal(classifyPost("The recipe is on my site."), "paywall");
+    assert.equal(
+      classifyPost("Calories: 430\nProtein: 43g\n500g chicken breast\n200g rice\nComment YUM if you make it"),
+      "recipe",
+    );
+  });
+
+  it("calculates macros from the USDA table and flags a large gap", () => {
+    const calculated = calculateFromIngredients(["500g chicken breast", "1 tsp salt"], 4);
+    assert.deepEqual(calculated.unresolved, []);
+    assert.equal(calculated.perServing.calories, 150);
+    assert.equal(calculated.perServing.protein_g, 28);
+    assert.equal(calculated.perServing.fat_g, 3);
+    assert.equal(macroMismatch({ calories: 150, protein_g: 28, carbs_g: 0, fat_g: 3 }, calculated.perServing), null);
+    assert.match(
+      macroMismatch({ calories: 400, protein_g: 28, carbs_g: 0, fat_g: 3 }, calculated.perServing) ?? "",
+      /calories stated 400/,
+    );
+    assert.equal(
+      statedMacroMismatch({
+        ingredients: ["500g chicken breast", "1 tbsp gochujang"],
+        servings: 2,
+        calories: 400,
+        protein_g: 40,
+        carbs_g: 10,
+        fat_g: 8,
+      }),
+      null,
+    );
+  });
+
+  it("keeps a fat-band dinner when one lean swap makes it pass", async () => {
+    const recipe: DraftRecipe = {
+      title: "Chicken stew",
+      category: "dinner",
+      description: "A one-pot chicken stew for the week.",
+      servings: 4,
+      prep_time_mins: 10,
+      cook_time_mins: 20,
+      calories: 600,
+      protein_g: 45,
+      carbs_g: 40,
+      fat_g: 18,
+      ingredients: ["500g chicken thigh", "200g rice"],
+      method: ["Brown the chicken.", "Simmer the rice."],
+      tags: ["high-protein"],
+      coach_note: null,
+      simplicity: "simple",
+      niche: false,
+    };
+    assert.equal(isLeanSwapCandidate(recipe), true);
+    const post: SourcePost = {
+      platform: "instagram",
+      sourceKey: "ig:stew",
+      url: "https://example.invalid/p/stew",
+      creditHandle: "neill_in_vs_out_nutrition",
+      caption: "Calories: 600\nProtein: 45g\n500g chicken thigh\n200g rice",
+    };
+    const swapped: DraftRecipe = {
+      ...recipe,
+      ingredients: ["500g chicken breast", "200g rice"],
+      calories: 450,
+      protein_g: 40,
+      carbs_g: 40,
+      fat_g: 8,
+      coach_note: "Lean swap: chicken thigh → chicken breast. Macros recomputed from USDA FoodData Central.",
+    };
+    const evaluated = await evaluatePosts([post], [], async () => ({ ok: true, recipe }), {
+      pad: false,
+      leanSwap: async () => swapped,
+    });
+    assert.equal(evaluated[0]?.outcome, "draft");
+    assert.equal(evaluated[0]?.filter?.decision, "pass");
+    assert.match(evaluated[0]?.note ?? "", /Lean swap: chicken thigh/);
+    assert.equal(evaluated[0]?.selected, true);
+  });
+
+  it("asks for original breakfasts and snacks, then tops up to 10", () => {
+    assert.deepEqual(originalSlots({ breakfast: 0, lunch: 3, dinner: 3, snack: 0 }), ["breakfast", "breakfast", "snack", "snack"]);
+    const fromScratch = originalSlots({ breakfast: 0, lunch: 0, dinner: 0, snack: 0 });
+    assert.equal(fromScratch.length, 10);
+    assert.equal(fromScratch.filter((category) => category === "breakfast").length, 2);
+    assert.equal(fromScratch.filter((category) => category === "snack").length, 2);
+  });
+
+  it("records full-caption rate and pass rate, and credits an original to B2S", () => {
+    const rates = creatorRates([
+      { platform: "instagram", handle: "jalalsamfit", fullCaption: true, passed: true },
+      { platform: "instagram", handle: "jalalsamfit", fullCaption: true, passed: true },
+      { platform: "instagram", handle: "jalalsamfit", fullCaption: true, passed: false },
+      { platform: "instagram", handle: "chlo_fitx", fullCaption: false, passed: false },
+    ]);
+    const jalal = rates.find((rate) => rate.handle === "jalalsamfit");
+    assert.equal(jalal?.fullCaptions, 3);
+    assert.equal(jalal?.passes, 2);
+    assert.equal(jalal?.posts, 3);
+    const recipe = extractRecipe(FIXTURE_POSTS[0].caption)!;
+    const row = toDraftRow(recipe, { ...FIXTURE_POSTS[0], platform: "b2s", creditHandle: "", sourceKey: "b2s:lunch-0" }, { status: "draft", note: "B2S original." });
+    assert.equal(row.published, false);
+    assert.equal(row.source_platform, "b2s");
+    assert.equal(sourceCredit(row.source_platform === "b2s" ? { ...FIXTURE_POSTS[0], platform: "b2s", creditHandle: "" } : FIXTURE_POSTS[0]), "B2S original.");
+    assert.equal(row.source_credit, "B2S original.");
+    assert.doesNotMatch(row.source_credit, /Inspired by/);
   });
 });

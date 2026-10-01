@@ -17,6 +17,8 @@ export interface Selectable {
   decision: Extract<FilterDecision, "pass" | "flag">;
   protein_g: number;
   simplicity?: Simplicity;
+  /** Higher-weight creators win a tie. Missing weight is treated as 1. */
+  weight?: number;
 }
 
 /**
@@ -24,12 +26,16 @@ export interface Selectable {
  * flags, and higher protein first. If a category is short, leftover recipes
  * fill the remaining slots up to WEEKLY_TARGET.
  */
-export function selectWeekly<T extends Selectable>(items: T[]): { picked: T[]; overflow: T[] } {
+export function selectWeekly<T extends Selectable>(items: T[], options?: { pad?: boolean }): { picked: T[]; overflow: T[] } {
+  const pad = options?.pad !== false;
   const ease = (item: T) => (item.simplicity === "fiddly" ? 2 : item.simplicity === "ok" ? 1 : 0);
+  const weight = (item: T) => item.weight ?? 1;
   const rank = (a: T, b: T) => {
     if (a.decision !== b.decision) return a.decision === "pass" ? -1 : 1;
     const byEase = ease(a) - ease(b);
     if (byEase !== 0) return byEase;
+    const byWeight = weight(b) - weight(a);
+    if (byWeight !== 0) return byWeight;
     return b.protein_g - a.protein_g;
   };
 
@@ -49,7 +55,7 @@ export function selectWeekly<T extends Selectable>(items: T[]): { picked: T[]; o
     overflow.push(...pool.slice(quota));
   }
 
-  if (picked.length < WEEKLY_TARGET && overflow.length > 0) {
+  if (pad && picked.length < WEEKLY_TARGET && overflow.length > 0) {
     const ranked = overflow.slice().sort(rank);
     const need = WEEKLY_TARGET - picked.length;
     const extra = ranked.slice(0, need);

@@ -49,7 +49,9 @@ export async function insertDrafts(rows: EvaluatedPost[]): Promise<{ inserted: I
   for (const row of rows) {
     if (!row.selected || !row.recipe || !row.filter) continue;
     const status = row.filter.decision === "flag" ? "flagged" : "draft";
-    const note = row.filter.decision === "flag" ? row.filter.reasons.join("; ") : null;
+    const flagNote = row.filter.decision === "flag" ? row.filter.reasons.join("; ") : null;
+    const extra = row.note && row.note !== "within thresholds" && row.note !== flagNote ? row.note : null;
+    const note = [flagNote, extra].filter(Boolean).join(" ") || null;
     const payload = toDraftRow(row.recipe, row.post, { status, note });
     const { data, error } = await supabase.from("recipes").insert(payload).select("id").single();
     if (error) {

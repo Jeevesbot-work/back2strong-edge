@@ -2,7 +2,7 @@ import type { RecipeCategory } from "@/lib/recipes-live";
 
 export type { RecipeCategory };
 
-export type Platform = "instagram" | "youtube";
+export type Platform = "instagram" | "youtube" | "b2s";
 
 /** One scraped post or video. Creator photos are never stored on this type. */
 export interface SourcePost {
@@ -14,6 +14,8 @@ export interface SourcePost {
   creditHandle: string;
   caption: string;
   transcript?: string | null;
+  /** Where a spoken method came from. YouTube subtitles are free; Instagram transcripts are capped. */
+  transcriptSource?: "youtube" | "instagram" | null;
   isReel?: boolean;
   titleHint?: string | null;
 }

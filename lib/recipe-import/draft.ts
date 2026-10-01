@@ -2,6 +2,7 @@ import { contentFingerprint } from "./dedupe";
 import type { DraftRecipe, SourcePost } from "./types";
 
 export function sourceCredit(post: SourcePost): string {
+  if (post.platform === "b2s") return "B2S original.";
   if (post.platform === "instagram") return `Inspired by @${post.creditHandle} on Instagram.`;
   return `Inspired by ${post.creditHandle} on YouTube.`;
 }
@@ -53,8 +54,10 @@ export function toDraftRow(
   importedAt: string = new Date().toISOString(),
 ): DraftRow {
   const credit = sourceCredit(post);
-  const alreadyCredited = recipe.coach_note?.includes(post.creditHandle);
-  const coach_note = alreadyCredited ? recipe.coach_note! : [recipe.coach_note, credit].filter(Boolean).join(" ");
+  const note = recipe.coach_note ?? "";
+  const alreadyCredited =
+    post.platform === "b2s" ? note.includes("B2S original") : !!post.creditHandle && note.includes(post.creditHandle);
+  const coach_note = alreadyCredited ? note : [note, credit].filter(Boolean).join(" ");
   return {
     title: recipe.title,
     slug: recipeSlug(recipe.title, post.sourceKey),

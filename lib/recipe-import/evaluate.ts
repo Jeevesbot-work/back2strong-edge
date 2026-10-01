@@ -1,5 +1,8 @@
 import { classifyPost, worthRewriting } from "./classify";
+import { weightForHandle } from "./creators";
 import { findDuplicate, type LibraryEntry } from "./dedupe";
+import { isLeanSwapCandidate } from "./lean-swap";
+import { statedMacroMismatch } from "./nutrition";
 import { selectWeekly } from "./select";
 import type { DraftRecipe, FilterResult, PostKind, SourcePost } from "./types";
 import { filterRecipe } from "./thresholds";
@@ -32,6 +35,14 @@ export type ExtractResult =
   | { ok: true; recipe: DraftRecipe }
   | { ok: false; kind?: PostKind; error: string };
 
+export interface EvaluateOptions {
+  /** When false, stop at the category quotas so originals can fill breakfast, snack, and any gap. */
+  pad?: boolean;
+  leanSwap?: (recipe: DraftRecipe) => Promise<DraftRecipe | null>;
+  /** Compare stated macros with the USDA table and flag a large gap. */
+  checkMacros?: boolean;
+}
+
 export function postText(post: SourcePost): string {
   return [post.caption?.trim(), post.transcript?.trim()].filter(Boolean).join("\n\n");
 }
@@ -40,6 +51,7 @@ export async function evaluatePosts(
   posts: SourcePost[],
   library: LibraryEntry[],
   extract: (post: SourcePost, text: string) => Promise<ExtractResult>,
+  options?: EvaluateOptions,
 ): Promise<EvaluatedPost[]> {
   const seen: LibraryEntry[] = library.map((entry) => ({
     ...entry,
@@ -106,7 +118,7 @@ export async function evaluatePosts(
       continue;
     }
 
-    const recipe = extracted.recipe;
+    let recipe = extracted.recipe;
     if (recipe.niche) {
       evaluated.push({
         post,
@@ -122,7 +134,7 @@ export async function evaluatePosts(
       continue;
     }
 
-    const filter = filterRecipe({
+    let filter = filterRecipe({
       category: recipe.category,
       calories: recipe.calories,
       protein_g: recipe.protein_g,
@@ -142,6 +154,35 @@ export async function evaluatePosts(
         note: filter.reasons.join("; "),
       });
       continue;
+    }
+
+    let swapped = false;
+    if (filter.decision === "flag" && options?.leanSwap && isLeanSwapCandidate(recipe)) {
+      const next = await options.leanSwap(recipe);
+      if (next) {
+        const again = filterRecipe({
+          category: next.category,
+          calories: next.calories,
+          protein_g: next.protein_g,
+          carbs_g: next.carbs_g,
+          fat_g: next.fat_g,
+        });
+        if (again.decision === "pass") {
+          recipe = next;
+          filter = again;
+          swapped = true;
+        }
+      }
+    }
+
+    if (!swapped && options?.checkMacros) {
+      const mismatch = statedMacroMismatch(recipe);
+      if (mismatch) {
+        filter = {
+          decision: "flag",
+          reasons: filter.decision === "flag" ? [...filter.reasons, mismatch] : [mismatch],
+        };
+      }
     }
 
     const duplicate = findDuplicate(
@@ -172,7 +213,7 @@ export async function evaluatePosts(
       duplicateReason: null,
       selected: false,
       outcome: filter.decision === "flag" ? "flagged_draft" : "draft",
-      note: filter.reasons.join("; "),
+      note: swapped ? recipe.coach_note : filter.reasons.join("; "),
     };
     evaluated.push(row);
     candidates.push(row);
@@ -190,7 +231,9 @@ export async function evaluatePosts(
       decision: row.filter!.decision as "pass" | "flag",
       protein_g: row.recipe!.protein_g,
       simplicity: row.recipe!.simplicity,
+      weight: weightForHandle(row.post.creditHandle, row.post.platform),
     })),
+    { pad: options?.pad !== false },
   );
   const pickedSet = new Set(picked.map((item) => item.row));
   const overflowSet = new Set(overflow.map((item) => item.row));

@@ -1,9 +1,11 @@
 import { addApifyUsd } from "./cost";
 import { captionHasDishName, captionHasMacros, captionHasMethod, classifyPost, hasRecipeBody } from "./classify";
 import {
+  activeCreators,
+  creatorFamily,
   getCreators,
-  INSTAGRAM_RESULTS_LIMIT,
   instagramProfileUrl,
+  postsPerCreator,
   SCRAPE_WINDOW,
   YOUTUBE_MAX_RESULTS,
   YOUTUBE_MAX_SHORTS,
@@ -63,10 +65,15 @@ function isReel(item: Record<string, unknown>): boolean {
   return typeof item.videoUrl === "string" || typeof item.video_url === "string";
 }
 
-/** Reels whose caption names the dish or shows macros, but does not write the method. */
-export const MAX_REEL_TRANSCRIPTS = 12;
+/**
+ * Paid Instagram transcripts are the last resort. YouTube subtitles are free.
+ * About $0.048 per started minute, so a week is hard-capped and spend-capped.
+ */
+export const MAX_REEL_TRANSCRIPTS = 10;
+export const REEL_CHARGE_CAP_USD = 0.4;
 
 export function needsReelTranscript(post: SourcePost): boolean {
+  if (post.transcript?.trim()) return false;
   if (post.platform !== "instagram" || !post.isReel) return false;
   const caption = post.caption || "";
   if (captionHasMethod(caption)) return false;
@@ -137,7 +144,35 @@ export function mergeReelTranscripts(posts: SourcePost[], items: Array<Record<st
     if (!needsReelTranscript(post)) return post;
     const code = post.sourceKey.replace(/^ig:/, "");
     const transcript = byCode.get(code);
-    return transcript ? { ...post, transcript } : post;
+    return transcript ? { ...post, transcript, transcriptSource: "instagram" as const } : post;
+  });
+}
+
+const TITLE_STOP = new Set(["with", "and", "the", "for", "from", "that", "this", "your"]);
+
+export function titlesOverlap(caption: string, title: string): boolean {
+  const words = title
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= 4 && !TITLE_STOP.has(word));
+  if (!words.length) return false;
+  const hay = caption.toLowerCase();
+  const hits = words.filter((word) => hay.includes(word));
+  if (hits.some((word) => word.length >= 8)) return true;
+  return hits.length >= 2;
+}
+
+/** Copy a free YouTube subtitle onto the Instagram reel of the same dish. */
+export function borrowYoutubeTranscripts(posts: SourcePost[]): SourcePost[] {
+  const videos = posts.filter((post) => post.platform === "youtube" && post.transcript?.trim());
+  return posts.map((post) => {
+    if (!needsReelTranscript(post)) return post;
+    const twin = videos.find((video) => {
+      if (creatorFamily(post.creditHandle) !== creatorFamily(video.creditHandle)) return false;
+      return titlesOverlap(post.caption || "", video.titleHint || "");
+    });
+    if (!twin?.transcript) return post;
+    return { ...post, transcript: twin.transcript, transcriptSource: "youtube" as const };
   });
 }
 
@@ -164,7 +199,7 @@ async function readActorJson(res: Response, actor: string, step: string): Promis
   return parseActorBody(await res.text(), res.status, actor, step);
 }
 
-async function runActor(actor: string, input: unknown): Promise<Array<Record<string, unknown>>> {
+async function runActor(actor: string, input: unknown, maxTotalChargeUsd: number): Promise<Array<Record<string, unknown>>> {
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error("APIFY_TOKEN is not set");
   const headers = {
@@ -173,7 +208,7 @@ async function runActor(actor: string, input: unknown): Promise<Array<Record<str
     Accept: "application/json",
   };
 
-  const startRes = await fetch(`${API}/acts/${actor}/runs`, {
+  const startRes = await fetch(`${API}/acts/${actor}/runs?maxTotalChargeUsd=${encodeURIComponent(String(maxTotalChargeUsd))}`, {
     method: "POST",
     headers,
     body: JSON.stringify(input),
@@ -228,56 +263,74 @@ function youtubeInput(handle: string, subtitlesFormat: "plaintext" | "srt") {
 }
 
 export async function scrapeCreators(): Promise<{ posts: SourcePost[]; errors: string[] }> {
-  const creators = getCreators();
+  const creators = activeCreators(getCreators());
   const errors: string[] = [];
   let posts: SourcePost[] = [];
 
-  try {
-    const items = await runActor("apify~instagram-scraper", {
-      directUrls: creators.instagram.map(instagramProfileUrl),
-      resultsType: "posts",
-      resultsLimit: INSTAGRAM_RESULTS_LIMIT,
-      onlyPostsNewerThan: SCRAPE_WINDOW,
-      skipPinnedPosts: true,
-    });
-    posts = instagramItemsToPosts(items);
-  } catch (err) {
-    errors.push(err instanceof Error ? err.message : "Instagram scrape failed");
-  }
-
-  const reelUrls = selectTranscriptTargets(posts).map((post) => post.url);
-  if (reelUrls.length > 0) {
+  // Free YouTube subtitles first. Paid Instagram transcripts come last.
+  for (const creator of creators.youtube) {
     try {
-      const reels = await runActor("apify~instagram-reel-scraper", {
-        username: reelUrls,
-        resultsLimit: reelUrls.length,
-        includeTranscript: true,
-        includeDownloadedVideo: false,
-        skipPinnedPosts: true,
-      });
-      posts = mergeReelTranscripts(posts, reels);
-    } catch (err) {
-      errors.push(err instanceof Error ? err.message : "Instagram reel transcript scrape failed");
-    }
-  }
-
-  for (const handle of creators.youtube) {
-    try {
-      const items = await runActor("streamers~youtube-scraper", youtubeInput(handle, "plaintext"));
+      const items = await runActor("streamers~youtube-scraper", youtubeInput(creator.handle, "plaintext"), 0.05);
       posts = posts.concat(youtubeItemsToPosts(items));
     } catch (err) {
       const message = err instanceof Error ? err.message : "YouTube scrape failed";
-      // A bad subtitle format fails before the actor runs. Retry that channel as SRT.
       if (!/start returned non-JSON|start failed|did not start/i.test(message)) {
         errors.push(message);
         continue;
       }
       try {
-        const items = await runActor("streamers~youtube-scraper", youtubeInput(handle, "srt"));
+        const items = await runActor("streamers~youtube-scraper", youtubeInput(creator.handle, "srt"), 0.05);
         posts = posts.concat(youtubeItemsToPosts(items));
       } catch (retryErr) {
         errors.push(retryErr instanceof Error ? retryErr.message : message);
       }
+    }
+  }
+
+  const groups = new Map<number, string[]>();
+  for (const creator of creators.instagram) {
+    const limit = postsPerCreator(creator.weight);
+    const urls = groups.get(limit) ?? [];
+    urls.push(instagramProfileUrl(creator.handle));
+    groups.set(limit, urls);
+  }
+  for (const [limit, urls] of Array.from(groups.entries())) {
+    try {
+      const items = await runActor(
+        "apify~instagram-scraper",
+        {
+          directUrls: urls,
+          resultsType: "posts",
+          resultsLimit: limit,
+          onlyPostsNewerThan: SCRAPE_WINDOW,
+          skipPinnedPosts: true,
+        },
+        Math.min(0.12, Math.max(0.05, urls.length * limit * 0.004)),
+      );
+      posts = posts.concat(instagramItemsToPosts(items));
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : "Instagram scrape failed");
+    }
+  }
+
+  posts = borrowYoutubeTranscripts(posts);
+  const reelUrls = selectTranscriptTargets(posts).map((post) => post.url);
+  if (reelUrls.length > 0) {
+    try {
+      const reels = await runActor(
+        "apify~instagram-reel-scraper",
+        {
+          username: reelUrls,
+          resultsLimit: reelUrls.length,
+          includeTranscript: true,
+          includeDownloadedVideo: false,
+          skipPinnedPosts: true,
+        },
+        REEL_CHARGE_CAP_USD,
+      );
+      posts = mergeReelTranscripts(posts, reels);
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : "Instagram reel transcript scrape failed");
     }
   }
 
