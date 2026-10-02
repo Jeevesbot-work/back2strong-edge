@@ -11,20 +11,24 @@ export interface GeneratedImage {
 }
 
 /**
- * Original food photo. The creator's image is never downloaded or uploaded.
- * Uses OpenAI image generation because the app has no image model of its own
- * (Claude, already used for text, does not return images).
+ * Phone photo of a home-cooked meal. The creator's image is never downloaded.
+ * gpt-image-1 at medium quality: about the same price as the previous $0.04 estimate, and below high quality.
  */
+export function recipeImagePrompt(recipe: Pick<DraftRecipe, "title" | "category" | "ingredients">): string {
+  const foods = recipe.ingredients.slice(0, 6).join(", ");
+  return [
+    `Casual phone photo of a home-cooked ${recipe.category}: ${recipe.title}.`,
+    "Ordinary UK family kitchen or dining table. Everyday plate, bowl, or a family-sized dish, not a restaurant plate.",
+    "Natural window light, a realistic portion, slightly imperfect plating. A little messy, still appetising.",
+    "No dark moody backdrop, no restaurant styling, no garnish theatre, no perfect symmetry, no glossy food-magazine look.",
+    foods ? `Show the cooked food, without labels or packaging: ${foods}.` : "Show the cooked food, without labels or packaging.",
+    "No text, no watermark, no logo, no people, no hands.",
+  ].join(" ");
+}
+
 export async function generateRecipeImage(recipe: DraftRecipe): Promise<GeneratedImage | { error: string }> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { error: "OPENAI_API_KEY is not set, so this draft has no photo yet" };
-
-  const prompt = [
-    `Original food photograph of ${recipe.title}, a ${recipe.category}.`,
-    "Dark matte plate, natural side light, shallow depth of field, home-kitchen realism.",
-    `Show the food only. Reflect these ingredients without labels or packaging: ${recipe.ingredients.slice(0, 6).join(", ")}.`,
-    "No text, no watermark, no logo, no people, no hands, no social-media screenshot, no creator watermark.",
-  ].join(" ");
 
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
@@ -34,8 +38,9 @@ export async function generateRecipeImage(recipe: DraftRecipe): Promise<Generate
     },
     body: JSON.stringify({
       model: "gpt-image-1",
-      prompt,
+      prompt: recipeImagePrompt(recipe),
       size: "1024x1024",
+      quality: "medium",
       n: 1,
       output_format: "jpeg",
     }),

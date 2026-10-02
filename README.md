@@ -72,7 +72,7 @@ Do not commit tokens. Add them in the GitHub repo (**Settings → Secrets and va
 | `NEXT_PUBLIC_SUPABASE_URL` | Already on Vercel. Add the same value as a GitHub secret. | Supabase project URL. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Already on Vercel. Add the same value as a GitHub secret. Never expose it to the browser. | Inserts drafts and uploads images. |
 | `ANTHROPIC_API_KEY` | Already on Vercel. Add the same value as a GitHub secret. | Claude rewrites each recipe. Same key the app already uses. |
-| `OPENAI_API_KEY` | GitHub secret, and Vercel if a live import is triggered there. | Original food photo (`gpt-image-1`). Not a creator's image. If it is missing, the draft is still saved and the review screen shows it without a photo. |
+| `OPENAI_API_KEY` | GitHub secret, and Vercel if a live import is triggered there. | Original phone-style photo of a home-cooked meal (`gpt-image-1`, medium quality). Not a creator's image. The Monday import uses this same prompt. If the key is missing, the draft is still saved and the review screen shows it without a photo. |
 | `CRON_SECRET` | Vercel, already used by `/api/cron/protein-pace`. | `Authorization: Bearer` for `GET /api/cron/recipe-import`. Not used by the GitHub Action. |
 | `RECIPE_CREATORS_JSON` | Optional. GitHub variable (or Vercel env). | Overrides the creator list. |
 | `RECIPE_IMPORT_DRY` | Optional. Set to `1` to force a dry run. | Writes nothing. |

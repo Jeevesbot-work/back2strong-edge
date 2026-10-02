@@ -2,7 +2,7 @@
  * Running cost of one import.
  * Apify's figure is the dollar amount the actor run reports.
  * Claude and image dollars are estimates from the published list prices
- * (Sonnet 4.6 at $3 / $15 per million tokens, gpt-image-1 1024px at about $0.04).
+ * (Sonnet 4.6 at $3 / $15 per million tokens, gpt-image-1 medium 1024px jpeg at about $0.04).
  */
 
 const SONNET_INPUT_PER_M = 3;

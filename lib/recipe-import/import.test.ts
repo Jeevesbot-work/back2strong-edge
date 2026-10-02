@@ -9,7 +9,7 @@ import { originalSlots } from "./slots";
 import { sourceCredit } from "./draft";
 import { classifyPost, hasRecipeBody, worthRewriting } from "./classify";
 import { toUk } from "./ease";
-import { imageCreditsExhausted } from "./images";
+import { imageCreditsExhausted, recipeImagePrompt } from "./images";
 import { evaluatePosts } from "./evaluate";
 import { contentFingerprint, findDuplicate, titleSimilarity } from "./dedupe";
 import { toDraftRow } from "./draft";
@@ -165,6 +165,18 @@ describe("classify and extract", () => {
     );
     assert.equal(toUk("1 zucchini, cilantro and ground turkey"), "1 courgette, coriander and turkey mince");
     assert.equal(imageCreditsExhausted("image generation failed (429): insufficient_quota"), true);
+    const prompt = recipeImagePrompt({
+      title: "Chicken stew",
+      category: "dinner",
+      ingredients: ["500g chicken breast"],
+    });
+    assert.match(prompt, /Casual phone photo/);
+    assert.match(prompt, /Natural window light/);
+    assert.match(prompt, /Ordinary UK family kitchen/);
+    assert.match(prompt, /No dark moody backdrop/);
+    assert.match(prompt, /no glossy food-magazine look/);
+    assert.doesNotMatch(prompt, /Dark matte plate/);
+    assert.doesNotMatch(prompt, /shallow depth of field/);
 
     const many = Array.from({ length: MAX_REEL_TRANSCRIPTS + 3 }, (_, index) => ({
       platform: "instagram" as const,
