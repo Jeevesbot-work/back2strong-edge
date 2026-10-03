@@ -158,7 +158,7 @@ export async function backfillDraftImages(): Promise<ImageBackfill> {
   return { filled, skipped };
 }
 
-export async function prepareLivePosts(): Promise<{ posts: Awaited<ReturnType<typeof scrapeCreators>>["posts"]; errors: string[] }> {
+export async function prepareLivePosts(): Promise<Awaited<ReturnType<typeof scrapeCreators>>> {
   for (const name of ["APIFY_TOKEN", "ANTHROPIC_API_KEY", "NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) {
     if (!process.env[name]) throw new Error(`${name} is not set`);
   }

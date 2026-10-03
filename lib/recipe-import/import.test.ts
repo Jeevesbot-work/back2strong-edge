@@ -1,6 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { borrowYoutubeTranscripts, MAX_REEL_TRANSCRIPTS, mergeReelTranscripts, needsReelTranscript, parseActorBody, selectTranscriptTargets, subtitlesToText, titlesOverlap } from "./apify";
+import {
+  APIFY_CREDIT_NOTE,
+  APIFY_MIN_REMAINING_USD,
+  REEL_CHARGE_CAP_USD,
+  apifyCreditExhausted,
+  borrowYoutubeTranscripts,
+  interpretLimitsResponse,
+  MAX_REEL_TRANSCRIPTS,
+  mergeReelTranscripts,
+  needsReelTranscript,
+  parseActorBody,
+  remainingFromLimits,
+  selectTranscriptTargets,
+  shouldSkipApify,
+  subtitlesToText,
+  titlesOverlap,
+} from "./apify";
 import { creatorRates } from "./creator-stats";
 import { activeCreators, DEFAULT_CREATORS, postsPerCreator } from "./creators";
 import { isLeanSwapCandidate } from "./lean-swap";
@@ -18,7 +34,7 @@ import { extractRecipe } from "./extract";
 import { FIXTURE_POSTS } from "./fixture";
 import { buildShoppingList } from "../shopping-list";
 import { normaliseIngredientLine } from "./ingredients";
-import { buildDryRunReport } from "./run";
+import { buildDryRunReport, formatSummary, planWhenApifyUnavailable, type ImportReport } from "./run";
 import { CATEGORY_QUOTA, selectWeekly, WEEKLY_TARGET } from "./select";
 import { filterRecipe, THRESHOLDS } from "./thresholds";
 import type { SourcePost } from "./types";
@@ -475,5 +491,84 @@ describe("sourcing mix", () => {
     assert.equal(sourceCredit(row.source_platform === "b2s" ? { ...FIXTURE_POSTS[0], platform: "b2s", creditHandle: "" } : FIXTURE_POSTS[0]), "B2S original.");
     assert.equal(row.source_credit, "B2S original.");
     assert.doesNotMatch(row.source_credit, /Inspired by/);
+  });
+
+  it("fills all 10 slots with originals when Apify credit is exhausted", () => {
+    assert.equal(APIFY_MIN_REMAINING_USD, 0.3);
+    assert.equal(REEL_CHARGE_CAP_USD, 0.4);
+    assert.equal(APIFY_CREDIT_NOTE, "Apify credit exhausted, used B2S originals");
+
+    assert.equal(apifyCreditExhausted("Apify instagram-scraper start failed (402): Payment required"), true);
+    assert.equal(apifyCreditExhausted("Monthly usage hard limit exceeded"), true);
+    assert.equal(apifyCreditExhausted("actor run refused: not-enough-usage"), true);
+    assert.equal(apifyCreditExhausted("By launching this job you will exceed your remaining usage of $0.12"), true);
+    assert.equal(
+      apifyCreditExhausted("Apify youtube-scraper ended with ABORTED: exceeded the maximum cost specified by the maxTotalChargeUsd parameter"),
+      false,
+    );
+    assert.equal(apifyCreditExhausted("Apify youtube-scraper timed out after 8 minutes"), false);
+    assert.equal(apifyCreditExhausted("instagram-scraper start returned non-JSON (500): <html>"), false);
+
+    const limits = {
+      data: { limits: { maxMonthlyUsageUsd: 5 }, current: { monthlyUsageUsd: 4.8 } },
+    };
+    assert.ok(Math.abs((remainingFromLimits(limits) ?? 0) - 0.2) < 0.001);
+    assert.equal(remainingFromLimits({ limits: { maxMonthlyUsageUsd: 5 }, current: { monthlyUsageUsd: 3.5 } }), 1.5);
+    assert.equal(remainingFromLimits({ data: { limits: {} } }), null);
+    assert.equal(shouldSkipApify(0.2), true);
+    assert.equal(shouldSkipApify(0.3), false);
+    assert.equal(shouldSkipApify(1.5), false);
+    assert.equal(shouldSkipApify(null), false);
+
+    const refused = interpretLimitsResponse(402, '{"error":{"type":"not-enough-usage","message":"Monthly usage hard limit exceeded"}}');
+    assert.equal(refused.creditExhausted, true);
+    assert.match(refused.message ?? "", /402/);
+    const quiet = interpretLimitsResponse(404, "not found");
+    assert.equal(quiet.creditExhausted, false);
+    assert.equal(quiet.remaining, null);
+    const low = interpretLimitsResponse(200, JSON.stringify(limits));
+    assert.equal(low.creditExhausted, false);
+    assert.equal(shouldSkipApify(low.remaining), true);
+
+    const credit = planWhenApifyUnavailable({
+      posts: [{ sourceKey: "ig:partial" }],
+      creditExhausted: true,
+    });
+    assert.equal(credit.skipCreators, true);
+    assert.equal(credit.note, APIFY_CREDIT_NOTE);
+    assert.equal(credit.slots.length, 10);
+    assert.equal(credit.slots.filter((category) => category === "breakfast").length, 2);
+    assert.equal(credit.slots.filter((category) => category === "lunch").length, 3);
+    assert.equal(credit.slots.filter((category) => category === "dinner").length, 3);
+    assert.equal(credit.slots.filter((category) => category === "snack").length, 2);
+
+    const empty = planWhenApifyUnavailable({ posts: [], creditExhausted: false });
+    assert.equal(empty.skipCreators, true);
+    assert.equal(empty.note, "Apify credit exhausted, used B2S originals");
+
+    const healthy = planWhenApifyUnavailable({ posts: [{ sourceKey: "ig:ok" }], creditExhausted: false });
+    assert.equal(healthy.skipCreators, false);
+    assert.equal(healthy.note, null);
+
+    const report: ImportReport = {
+      mode: "live",
+      wrote: false,
+      publishesAutomatically: false,
+      library: "supabase",
+      weeklyTarget: 10,
+      quotas: CATEGORY_QUOTA,
+      thresholds: THRESHOLDS,
+      considered: 0,
+      selectedCount: 10,
+      rows: [],
+      errors: ["Apify instagram-scraper start failed (402): Monthly usage hard limit exceeded"],
+      apifyNote: credit.note ?? undefined,
+    };
+    const summary = formatSummary(report);
+    assert.match(summary, /Apify credit exhausted, used B2S originals/);
+    assert.equal(report.errors.includes(APIFY_CREDIT_NOTE), false);
+    const blocked = report.errors.some((error) => /is not set|columns are missing/i.test(error));
+    const wouldFail = blocked || (report.errors.length > 0 && report.selectedCount === 0);
+    assert.equal(wouldFail, false);
   });
 });

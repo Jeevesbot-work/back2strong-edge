@@ -1,3 +1,4 @@
+import { APIFY_CREDIT_NOTE } from "./apify";
 import { hasRecipeBody } from "./classify";
 import { formatCreatorRates, creatorRates } from "./creator-stats";
 import { formatCost, importCost, resetImportCost, type ImportCost } from "./cost";
@@ -59,6 +60,21 @@ export interface ImportReport {
   imagesBackfilled?: number;
   notification?: string;
   cost?: ImportCost;
+  apifyNote?: string;
+}
+
+/** When Apify is out of credit or returns nothing, skip creator posts and fill the week with originals. */
+export function planWhenApifyUnavailable(scraped: { posts: unknown[]; creditExhausted: boolean }): {
+  skipCreators: boolean;
+  note: string | null;
+  slots: RecipeCategory[];
+} {
+  const skipCreators = scraped.creditExhausted || scraped.posts.length === 0;
+  return {
+    skipCreators,
+    note: skipCreators ? APIFY_CREDIT_NOTE : null,
+    slots: skipCreators ? originalSlots({ breakfast: 0, lunch: 0, dinner: 0, snack: 0 }) : [],
+  };
 }
 
 function toRow(item: EvaluatedPost): ReportRow {
@@ -126,6 +142,7 @@ export function formatSummary(report: ImportReport): string {
     report.mode === "dry-run"
       ? "Dry run. Nothing was written. Drafts are never published automatically."
       : `Live import. ${report.inserted?.length ?? 0} unpublished draft(s) written. Nothing was published.`,
+    ...(report.apifyNote ? [report.apifyNote] : []),
     `Library: ${report.library === "bundled-sample" ? "bundled sample in lib/recipes.ts (live mode reads public.recipes)" : "public.recipes"}.`,
     `${report.considered} posts considered. ${report.selectedCount} selected for the week (target ${report.weeklyTarget}).`,
     `Outcomes: ${outcomeBits.join(", ") || "none"}.`,
@@ -185,24 +202,29 @@ export async function runRecipeImport(options: { dry: boolean }): Promise<Import
   }));
   const scraped = await prepareLivePosts();
   const library = await loadLiveLibrary();
-  const evaluated = await evaluatePosts(scraped.posts, library, async (_post, text) => rewriteForImport(text), {
-    pad: false,
-    leanSwap: leanSwapRecipe,
-    checkMacros: true,
-  });
-  for (const row of evaluated) {
-    if (!row.selected || row.filter?.decision !== "flag") continue;
-    if (row.recipe?.category !== "breakfast" && row.recipe?.category !== "snack") continue;
-    row.selected = false;
-    row.outcome = "over_cap";
-    row.note = "held back so a Back2Strong original can fill this breakfast or snack slot";
+  const apifyPlan = planWhenApifyUnavailable(scraped);
+  const evaluated = apifyPlan.skipCreators
+    ? []
+    : await evaluatePosts(scraped.posts, library, async (_post, text) => rewriteForImport(text), {
+        pad: false,
+        leanSwap: leanSwapRecipe,
+        checkMacros: true,
+      });
+  if (!apifyPlan.skipCreators) {
+    for (const row of evaluated) {
+      if (!row.selected || row.filter?.decision !== "flag") continue;
+      if (row.recipe?.category !== "breakfast" && row.recipe?.category !== "snack") continue;
+      row.selected = false;
+      row.outcome = "over_cap";
+      row.note = "held back so a Back2Strong original can fill this breakfast or snack slot";
+    }
   }
   const counts: Record<RecipeCategory, number> = { breakfast: 0, lunch: 0, dinner: 0, snack: 0 };
   for (const row of evaluated) {
     if (row.selected && row.recipe) counts[row.recipe.category] += 1;
   }
   const originals = await generateOriginals(
-    originalSlots(counts),
+    apifyPlan.skipCreators ? apifyPlan.slots : originalSlots(counts),
     [...library.map((entry) => entry.title), ...evaluated.map((row) => row.recipe?.title ?? "")].filter(Boolean),
   );
   evaluated.push(...originals.posts);
@@ -229,5 +251,6 @@ export async function runRecipeImport(options: { dry: boolean }): Promise<Import
     imagesBackfilled: backfill.filled,
     notification,
     cost: importCost(),
+    ...(apifyPlan.note ? { apifyNote: apifyPlan.note } : {}),
   };
 }

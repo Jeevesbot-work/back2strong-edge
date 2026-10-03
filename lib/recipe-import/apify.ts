@@ -72,6 +72,53 @@ function isReel(item: Record<string, unknown>): boolean {
 export const MAX_REEL_TRANSCRIPTS = 10;
 export const REEL_CHARGE_CAP_USD = 0.4;
 
+/** Skip actor runs when the free-plan balance is about to run out. Per-run caps stay as they are. */
+export const APIFY_MIN_REMAINING_USD = 0.3;
+export const APIFY_CREDIT_NOTE = "Apify credit exhausted, used B2S originals";
+
+const CREDIT_LIMIT = /402|payment required|monthly usage|usage hard limit|usage limit exceeded|not-enough-usage|not enough usage|exceed your remaining usage|insufficient credit|credit exhausted|platform-feature-disabled|hard limit exceeded|exceeded the usage|quota exceeded|actor run refused/i;
+const PER_RUN_CHARGE = /maxTotalChargeUsd|max total charge|total charge/i;
+
+/** True for monthly credit and usage-limit failures. A per-run maxTotalChargeUsd abort is not one of these. */
+export function apifyCreditExhausted(message: string): boolean {
+  if (PER_RUN_CHARGE.test(message)) return false;
+  return CREDIT_LIMIT.test(message);
+}
+
+/** Remaining monthly USD from GET /v2/users/me/limits. Null when the body has no usage fields. */
+export function remainingFromLimits(body: unknown): number | null {
+  const root = asRecord(body);
+  const data = asRecord(root?.data) ?? root;
+  const limits = asRecord(data?.limits);
+  const current = asRecord(data?.current);
+  const max = limits?.maxMonthlyUsageUsd;
+  const used = current?.monthlyUsageUsd;
+  if (typeof max !== "number" || typeof used !== "number" || !Number.isFinite(max) || !Number.isFinite(used)) return null;
+  return max - used;
+}
+
+export function shouldSkipApify(remaining: number | null): boolean {
+  return remaining != null && remaining < APIFY_MIN_REMAINING_USD;
+}
+
+/** Read a limits response without calling Apify. A non-credit failure leaves the scrape free to continue. */
+export function interpretLimitsResponse(status: number, body: string): { remaining: number | null; creditExhausted: boolean; message: string | null } {
+  const snippet = body.replace(/\s+/g, " ").trim().slice(0, 180);
+  const message = `Apify limits check failed (${status}): ${snippet}`;
+  if (status === 402 || (status >= 400 && apifyCreditExhausted(message))) {
+    return { remaining: null, creditExhausted: true, message };
+  }
+  if (status < 200 || status >= 300) {
+    return { remaining: null, creditExhausted: false, message: null };
+  }
+  try {
+    const parsed = body.trim() ? JSON.parse(body) : null;
+    return { remaining: remainingFromLimits(parsed), creditExhausted: false, message: null };
+  } catch {
+    return { remaining: null, creditExhausted: false, message: null };
+  }
+}
+
 export function needsReelTranscript(post: SourcePost): boolean {
   if (post.transcript?.trim()) return false;
   if (post.platform !== "instagram" || !post.isReel) return false;
@@ -220,6 +267,7 @@ async function runActor(actor: string, input: unknown, maxTotalChargeUsd: number
   if (!runId || !datasetId) throw new Error(`Apify ${actor} returned no run id`);
 
   let status = typeof run?.status === "string" ? run.status : "READY";
+  let statusMessage = runDetail(run);
   let spent = usageUsd(run);
   const deadline = Date.now() + RUN_TIMEOUT_MS;
   while (!["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"].includes(status)) {
@@ -229,15 +277,27 @@ async function runActor(actor: string, input: unknown, maxTotalChargeUsd: number
     const poll = asRecord(await readActorJson(pollRes, actor, "poll"));
     const data = asRecord(poll?.data);
     status = typeof data?.status === "string" ? data.status : "FAILED";
+    statusMessage = runDetail(data) || statusMessage;
     spent = usageUsd(data) || spent;
   }
   addApifyUsd(spent);
-  if (status !== "SUCCEEDED") throw new Error(`Apify ${actor} ended with ${status}`);
+  if (status !== "SUCCEEDED") {
+    const detail = statusMessage ? `: ${statusMessage}` : "";
+    throw new Error(`Apify ${actor} ended with ${status}${detail}`);
+  }
 
   const itemsRes = await fetch(`${API}/datasets/${datasetId}/items?clean=true&format=json&limit=500`, { headers });
   const items = await readActorJson(itemsRes, actor, "items");
   if (!Array.isArray(items)) return [];
   return items.map((item) => asRecord(item)).filter((item): item is Record<string, unknown> => !!item);
+}
+
+function runDetail(data: Record<string, unknown> | null): string {
+  if (!data) return "";
+  const parts = [data.statusMessage, data.errorMessage].filter(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+  return parts.join(" ");
 }
 
 function usageUsd(data: Record<string, unknown> | null): number {
@@ -262,29 +322,67 @@ function youtubeInput(handle: string, subtitlesFormat: "plaintext" | "srt") {
   };
 }
 
-export async function scrapeCreators(): Promise<{ posts: SourcePost[]; errors: string[] }> {
+function originalsOnly(errors: string[]): { posts: SourcePost[]; errors: string[]; creditExhausted: true } {
+  return { posts: [], errors, creditExhausted: true };
+}
+
+async function fetchApifyLimits(): Promise<{ remaining: number | null; creditExhausted: boolean; message: string | null }> {
+  const token = process.env.APIFY_TOKEN;
+  if (!token) return { remaining: null, creditExhausted: false, message: null };
+  try {
+    const res = await fetch(`${API}/users/me/limits`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    });
+    return interpretLimitsResponse(res.status, await res.text());
+  } catch {
+    return { remaining: null, creditExhausted: false, message: null };
+  }
+}
+
+async function runOrStop(
+  actor: string,
+  input: unknown,
+  maxTotalChargeUsd: number,
+  errors: string[],
+): Promise<{ items: Array<Record<string, unknown>> | null; stop: boolean }> {
+  try {
+    return { items: await runActor(actor, input, maxTotalChargeUsd), stop: false };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : `${actor} failed`;
+    errors.push(message);
+    return { items: null, stop: apifyCreditExhausted(message) };
+  }
+}
+
+export async function scrapeCreators(): Promise<{ posts: SourcePost[]; errors: string[]; creditExhausted: boolean }> {
+  const limits = await fetchApifyLimits();
+  if (limits.creditExhausted || shouldSkipApify(limits.remaining)) {
+    const errors: string[] = [];
+    if (limits.message) errors.push(limits.message);
+    else if (limits.remaining != null) {
+      errors.push(`Apify remaining usage is $${limits.remaining.toFixed(2)}, under $${APIFY_MIN_REMAINING_USD.toFixed(2)}`);
+    }
+    return originalsOnly(errors);
+  }
+
   const creators = activeCreators(getCreators());
   const errors: string[] = [];
   let posts: SourcePost[] = [];
 
   // Free YouTube subtitles first. Paid Instagram transcripts come last.
   for (const creator of creators.youtube) {
-    try {
-      const items = await runActor("streamers~youtube-scraper", youtubeInput(creator.handle, "plaintext"), 0.05);
-      posts = posts.concat(youtubeItemsToPosts(items));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "YouTube scrape failed";
-      if (!/start returned non-JSON|start failed|did not start/i.test(message)) {
-        errors.push(message);
-        continue;
-      }
-      try {
-        const items = await runActor("streamers~youtube-scraper", youtubeInput(creator.handle, "srt"), 0.05);
-        posts = posts.concat(youtubeItemsToPosts(items));
-      } catch (retryErr) {
-        errors.push(retryErr instanceof Error ? retryErr.message : message);
-      }
+    const first = await runOrStop("streamers~youtube-scraper", youtubeInput(creator.handle, "plaintext"), 0.05, errors);
+    if (first.stop) return originalsOnly(errors);
+    if (first.items) {
+      posts = posts.concat(youtubeItemsToPosts(first.items));
+      continue;
     }
+    const message = errors[errors.length - 1] ?? "";
+    if (!/start returned non-JSON|start failed|did not start/i.test(message)) continue;
+    errors.pop();
+    const retry = await runOrStop("streamers~youtube-scraper", youtubeInput(creator.handle, "srt"), 0.05, errors);
+    if (retry.stop) return originalsOnly(errors);
+    if (retry.items) posts = posts.concat(youtubeItemsToPosts(retry.items));
   }
 
   const groups = new Map<number, string[]>();
@@ -295,44 +393,41 @@ export async function scrapeCreators(): Promise<{ posts: SourcePost[]; errors: s
     groups.set(limit, urls);
   }
   for (const [limit, urls] of Array.from(groups.entries())) {
-    try {
-      const items = await runActor(
-        "apify~instagram-scraper",
-        {
-          directUrls: urls,
-          resultsType: "posts",
-          resultsLimit: limit,
-          onlyPostsNewerThan: SCRAPE_WINDOW,
-          skipPinnedPosts: true,
-        },
-        Math.min(0.12, Math.max(0.05, urls.length * limit * 0.004)),
-      );
-      posts = posts.concat(instagramItemsToPosts(items));
-    } catch (err) {
-      errors.push(err instanceof Error ? err.message : "Instagram scrape failed");
-    }
+    const result = await runOrStop(
+      "apify~instagram-scraper",
+      {
+        directUrls: urls,
+        resultsType: "posts",
+        resultsLimit: limit,
+        onlyPostsNewerThan: SCRAPE_WINDOW,
+        skipPinnedPosts: true,
+      },
+      Math.min(0.12, Math.max(0.05, urls.length * limit * 0.004)),
+      errors,
+    );
+    if (result.stop) return originalsOnly(errors);
+    if (result.items) posts = posts.concat(instagramItemsToPosts(result.items));
   }
 
   posts = borrowYoutubeTranscripts(posts);
   const reelUrls = selectTranscriptTargets(posts).map((post) => post.url);
   if (reelUrls.length > 0) {
-    try {
-      const reels = await runActor(
-        "apify~instagram-reel-scraper",
-        {
-          username: reelUrls,
-          resultsLimit: reelUrls.length,
-          includeTranscript: true,
-          includeDownloadedVideo: false,
-          skipPinnedPosts: true,
-        },
-        REEL_CHARGE_CAP_USD,
-      );
-      posts = mergeReelTranscripts(posts, reels);
-    } catch (err) {
-      errors.push(err instanceof Error ? err.message : "Instagram reel transcript scrape failed");
-    }
+    const reels = await runOrStop(
+      "apify~instagram-reel-scraper",
+      {
+        username: reelUrls,
+        resultsLimit: reelUrls.length,
+        includeTranscript: true,
+        includeDownloadedVideo: false,
+        skipPinnedPosts: true,
+      },
+      REEL_CHARGE_CAP_USD,
+      errors,
+    );
+    if (reels.stop) return originalsOnly(errors);
+    if (reels.items) posts = mergeReelTranscripts(posts, reels.items);
   }
 
-  return { posts, errors };
+  if (posts.length === 0) return originalsOnly(errors);
+  return { posts, errors, creditExhausted: false };
 }
