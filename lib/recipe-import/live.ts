@@ -1,4 +1,5 @@
 import { scrapeCreators } from "./apify";
+import { MIN_METHOD_STEPS } from "./ingredients";
 import { toDraftRow } from "./draft";
 import { evaluatePosts, type EvaluatedPost } from "./evaluate";
 import { generateRecipeImage, imageCreditsExhausted } from "./images";
@@ -48,6 +49,10 @@ export async function insertDrafts(rows: EvaluatedPost[]): Promise<{ inserted: I
 
   for (const row of rows) {
     if (!row.selected || !row.recipe || !row.filter) continue;
+    if (row.recipe.method.filter((step) => step.trim()).length < MIN_METHOD_STEPS) {
+      errors.push(`${row.post.sourceKey} was not saved: method needs at least ${MIN_METHOD_STEPS} steps`);
+      continue;
+    }
     const status = row.filter.decision === "flag" ? "flagged" : "draft";
     const flagNote = row.filter.decision === "flag" ? row.filter.reasons.join("; ") : null;
     const extra = row.note && row.note !== "within thresholds" && row.note !== flagNote ? row.note : null;

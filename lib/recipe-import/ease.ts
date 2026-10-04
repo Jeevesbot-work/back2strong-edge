@@ -24,6 +24,17 @@ export function toUk(text: string): string {
   return next;
 }
 
+/** UK names, and oven temperatures written as fan centigrade. */
+export function styleMethodStep(step: string): string {
+  let line = toUk(step);
+  line = line.replace(/(\d+(?:\.\d+)?)\s*(?:degrees?)?\s*°?\s*C\b(?!\s*fan)/gi, "$1°C fan");
+  line = line.replace(/(\d+(?:\.\d+)?)\s*°?\s*F\b/gi, (_match, raw: string) => {
+    const fan = Math.round((((Number(raw) - 32) * 5) / 9 - 20) / 5) * 5;
+    return `${fan}°C fan`;
+  });
+  return line.replace(/\s+/g, " ").trim();
+}
+
 function uniqueTags(tags: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -47,7 +58,7 @@ export function finishDraft(
   const title = toUk(recipe.title);
   const description = toUk(recipe.description);
   const ingredients = recipe.ingredients.map(toUk);
-  const method = recipe.method.map(toUk);
+  const method = recipe.method.map(styleMethodStep);
   const minutes = (recipe.prep_time_mins ?? 0) + (recipe.cook_time_mins ?? 0);
   const blob = [title, description, ...ingredients, ...method].join(" ");
   const niche = recipe.niche || !!hints?.niche || NICHE.test(blob);

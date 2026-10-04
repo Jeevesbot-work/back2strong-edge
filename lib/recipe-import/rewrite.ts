@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { addClaudeUsage } from "./cost";
 import { finishDraft } from "./ease";
-import { normaliseIngredientLine, normaliseMethodStep } from "./ingredients";
+import { MIN_METHOD_STEPS, normaliseIngredientLine, normaliseMethodStep } from "./ingredients";
 import type { DraftRecipe, PostKind, RecipeCategory, Simplicity } from "./types";
 import type { ExtractResult } from "./evaluate";
 
@@ -68,7 +68,7 @@ function toRecipe(parsed: Record<string, unknown>): DraftRecipe | PostKind | nul
   if (!title || !description || servings == null || calories == null || protein == null || carbs == null || fat == null) {
     return null;
   }
-  if (ingredients.length < 3 || method.length < 2) return null;
+  if (ingredients.length < 3 || method.length < MIN_METHOD_STEPS) return null;
 
   const hinted = typeof parsed.simplicity === "string" ? parsed.simplicity : "";
   const simplicity: Simplicity = hinted === "simple" || hinted === "fiddly" ? hinted : "ok";
@@ -111,12 +111,12 @@ If it is not a recipe, return {"kind":"not_a_recipe"}.
 If macros are not stated (per serving or as a total you can divide by the servings), return {"kind":"not_a_recipe"}. Do not estimate macros.
 
 When it is a recipe, return:
-{"kind":"recipe","title":"","category":"breakfast|lunch|dinner|snack","description":"","servings":4,"prep_time_mins":10,"cook_time_mins":20,"calories":500,"protein_g":40,"carbs_g":35,"fat_g":12,"ingredients":["500g chicken breast"],"method":["Heat the oven to 200C."],"tags":["high-protein","quick","family"],"coach_note":"","simplicity":"simple","niche":false,"batch_cook":false,"family":true}
+{"kind":"recipe","title":"","category":"breakfast|lunch|dinner|snack","description":"","servings":4,"prep_time_mins":10,"cook_time_mins":20,"calories":500,"protein_g":40,"carbs_g":35,"fat_g":12,"ingredients":["500g chicken breast"],"method":["Heat the oven to 180°C fan.","Season the chicken and roast it until cooked through.","Rest it, then divide between the plates."],"tags":["high-protein","quick","family"],"coach_note":"","simplicity":"simple","niche":false,"batch_cook":false,"family":true}
 
 Rules for those fields:
 - calories, protein_g, carbs_g and fat_g are per serving. If the source gives a batch total, divide by servings and round.
 - ingredients is one line per item and nothing else. Grams and millilitres are glued to the number: "500g chicken breast", "200ml milk". Spoons stay separate: "1 tbsp soy sauce". No section headings.
-- method is short original steps. Do not mention the creator, their account, or "link in bio".
+- method is at least 3 clear steps, in cooking order, one action each. Do not prefix the steps with numbers. Oven temperatures are °C fan, for example "Heat the oven to 180°C fan". Use UK ingredient names. Do not mention the creator, their account, or "link in bio".
 - coach_note is one sentence of practical coaching, or an empty string. Do not put the source credit there — the app adds that.
 - category is the meal the dish is, not the time of day it was posted.
 - Write for a UK kitchen. Use grams and millilitres, and UK names: courgette not zucchini, coriander not cilantro, aubergine not eggplant, rocket not arugula, spring onion not scallion, mince not ground meat, plain flour not all-purpose flour.
@@ -129,7 +129,7 @@ Rules for those fields:
 
 Add those fields to the recipe JSON: "simplicity":"simple","niche":false,"batch_cook":false,"family":true`;
 
-async function complete(source: string, stricter: boolean): Promise<Record<string, unknown> | null> {
+async function complete(source: string, hint: string): Promise<Record<string, unknown> | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
   const anthropic = new Anthropic({ apiKey });
@@ -140,7 +140,7 @@ async function complete(source: string, stricter: boolean): Promise<Record<strin
     messages: [
       {
         role: "user",
-        content: `${stricter ? "Your previous draft copied the source. Rewrite every step and the description so no sentence of 80 characters or more appears in the source. Keep the quantities.\n\n" : ""}SOURCE:\n${source}`,
+        content: `${hint ? `${hint}\n\n` : ""}SOURCE:\n${source}`,
       },
     ],
   });
@@ -150,19 +150,20 @@ async function complete(source: string, stricter: boolean): Promise<Record<strin
 
 /** Rewrite one source in Edge's words. Refuses a draft that still copies a long source sentence. */
 export async function rewriteRecipe(source: string): Promise<ExtractResult> {
-  let parsed = await complete(source, false);
+  const shortMethod = "The last reply was incomplete. Return a full recipe whose method has at least 3 clear steps, UK ingredient names, and oven temperatures in °C fan. Keep the quantities.";
+  let parsed = await complete(source, "");
   if (!parsed) return { ok: false, error: "the model did not return JSON" };
   let recipe = toRecipe(parsed);
   if (typeof recipe === "string") return { ok: false, kind: recipe, error: `model marked this as ${recipe}` };
   if (!recipe) {
-    parsed = await complete(source, true);
+    parsed = await complete(source, shortMethod);
     if (!parsed) return { ok: false, error: "the model did not return JSON" };
     recipe = toRecipe(parsed);
     if (typeof recipe === "string") return { ok: false, kind: recipe, error: `model marked this as ${recipe}` };
     if (!recipe) return { ok: false, error: "the model returned an incomplete recipe" };
   }
   if (looksCopied(recipe, source)) {
-    parsed = await complete(source, true);
+    parsed = await complete(source, "Your previous draft copied the source. Rewrite every step and the description so no sentence of 80 characters or more appears in the source. Keep the quantities. The method still needs at least 3 clear steps.");
     recipe = parsed ? toRecipe(parsed) : null;
     if (!recipe || typeof recipe === "string") {
       return { ok: false, error: "rewrite stayed too close to the source, so it was not saved" };

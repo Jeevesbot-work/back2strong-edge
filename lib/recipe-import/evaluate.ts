@@ -1,4 +1,5 @@
 import { classifyPost, worthRewriting } from "./classify";
+import { MIN_METHOD_STEPS } from "./ingredients";
 import { weightForHandle } from "./creators";
 import { findDuplicate, type LibraryEntry } from "./dedupe";
 import { isLeanSwapCandidate } from "./lean-swap";
@@ -119,6 +120,20 @@ export async function evaluatePosts(
     }
 
     let recipe = extracted.recipe;
+    if (recipe.method.length < MIN_METHOD_STEPS) {
+      evaluated.push({
+        post,
+        classification: "extract_failed",
+        recipe,
+        filter: null,
+        duplicateOf: null,
+        duplicateReason: null,
+        selected: false,
+        outcome: "extract_failed",
+        note: `method needs at least ${MIN_METHOD_STEPS} steps`,
+      });
+      continue;
+    }
     if (recipe.niche) {
       evaluated.push({
         post,

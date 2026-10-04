@@ -37,12 +37,21 @@ export async function POST(req: NextRequest) {
   if (action === "edit") {
     const title = typeof body?.title === "string" ? body.title.trim() : "";
     const category = typeof body?.category === "string" ? body.category : "";
+    const method = Array.isArray(body?.method)
+      ? body.method
+          .filter((item: unknown): item is string => typeof item === "string")
+          .map((item: string) => item.replace(/^\d+[.)]\s+/, "").trim())
+          .filter(Boolean)
+      : [];
     if (!title || !["breakfast", "lunch", "dinner", "snack"].includes(category)) {
       return NextResponse.json({ error: "title and category are required" }, { status: 400 });
     }
+    if (method.length < 3) {
+      return NextResponse.json({ error: "Method needs at least 3 steps" }, { status: 400 });
+    }
     const { data, error } = await admin
       .from("recipes")
-      .update({ title, category })
+      .update({ title, category, method })
       .eq("id", id)
       .eq("published", false)
       .select("id")

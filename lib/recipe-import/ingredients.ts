@@ -19,6 +19,9 @@ export function normaliseIngredientLine(raw: string): string | null {
   return line.replace(/\s+/g, " ").trim();
 }
 
+/** A saved recipe needs a real method, not a one-line note. */
+export const MIN_METHOD_STEPS = 3;
+
 export function normaliseMethodStep(raw: string): string | null {
   const line = raw
     .trim()

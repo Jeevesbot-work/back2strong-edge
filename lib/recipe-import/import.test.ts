@@ -24,7 +24,8 @@ import { calculateFromIngredients, macroMismatch, statedMacroMismatch } from "./
 import { originalSlots } from "./slots";
 import { sourceCredit } from "./draft";
 import { classifyPost, hasRecipeBody, worthRewriting } from "./classify";
-import { toUk } from "./ease";
+import { styleMethodStep, toUk } from "./ease";
+import { MIN_METHOD_STEPS } from "./ingredients";
 import { imageCreditsExhausted, recipeImagePrompt } from "./images";
 import { evaluatePosts } from "./evaluate";
 import { contentFingerprint, findDuplicate, titleSimilarity } from "./dedupe";
@@ -90,6 +91,17 @@ describe("classify and extract", () => {
     assert.equal(recipe?.ingredients[0], "500g chicken breast");
     assert.equal(recipe?.protein_g, 54);
     assert.equal(recipe?.fat_g, 11);
+    assert.ok((recipe?.method.length ?? 0) >= MIN_METHOD_STEPS);
+    assert.match(recipe?.method[0] ?? "", /200°C fan/);
+  });
+
+  it("drops a recipe whose method has fewer than 3 steps", () => {
+    assert.equal(MIN_METHOD_STEPS, 3);
+    const short = FIXTURE_POSTS[0].caption.replace(/\n3\. Roast[\s\S]*$/, "");
+    assert.equal(extractRecipe(short), null);
+    assert.equal(styleMethodStep("Heat the oven to 180°C fan."), "Heat the oven to 180°C fan.");
+    assert.equal(styleMethodStep("Bake the zucchini at 200C."), "Bake the courgette at 200°C fan.");
+    assert.equal(styleMethodStep("Roast at 400F until golden."), "Roast at 185°C fan until golden.");
   });
 
   it("glues gram amounts the way the shopping list expects", () => {
@@ -432,7 +444,7 @@ describe("sourcing mix", () => {
       carbs_g: 40,
       fat_g: 18,
       ingredients: ["500g chicken thigh", "200g rice"],
-      method: ["Brown the chicken.", "Simmer the rice."],
+      method: ["Brown the chicken.", "Simmer the rice.", "Rest it, then serve."],
       tags: ["high-protein"],
       coach_note: null,
       simplicity: "simple",

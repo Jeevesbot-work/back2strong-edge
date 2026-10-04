@@ -1,6 +1,6 @@
 import type { RecipeCategory } from "@/lib/recipes-live";
 import { finishDraft } from "./ease";
-import { normaliseIngredientLine, normaliseMethodStep } from "./ingredients";
+import { MIN_METHOD_STEPS, normaliseIngredientLine, normaliseMethodStep } from "./ingredients";
 import type { DraftRecipe } from "./types";
 
 const CATEGORIES: RecipeCategory[] = ["breakfast", "lunch", "dinner", "snack"];
@@ -103,7 +103,7 @@ export function extractRecipe(text: string, titleHint?: string | null): DraftRec
   if (!title || !category || !servings || calories == null || protein == null || carbs == null || fat == null) {
     return null;
   }
-  if (ingredients.length < 3 || method.length < 2) return null;
+  if (ingredients.length < 3 || method.length < MIN_METHOD_STEPS) return null;
 
   return finishDraft({
     title,

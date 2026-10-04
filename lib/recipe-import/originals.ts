@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { addClaudeUsage } from "./cost";
 import type { EvaluatedPost } from "./evaluate";
 import { finishDraft } from "./ease";
-import { normaliseIngredientLine, normaliseMethodStep } from "./ingredients";
+import { MIN_METHOD_STEPS, normaliseIngredientLine, normaliseMethodStep } from "./ingredients";
 import { calculateWithLookup } from "./nutrition";
 import type { RecipeCategory } from "./types";
 import { filterRecipe } from "./thresholds";
@@ -67,8 +67,8 @@ async function draftOriginal(
     model: "claude-sonnet-4-6",
     max_tokens: 1400,
     system: `You write an original Back2Strong recipe. It must not copy a creator, a website, or a famous named dish. Return JSON only.
-{"title":"","description":"","servings":${servings},"prep_time_mins":10,"cook_time_mins":15,"ingredients":["200g chicken breast"],"method":["Heat the pan.","Serve."],"coach_note":"","simplicity":"simple","batch_cook":false,"family":true}
-Rules: about 10 ingredients or fewer, 30 minutes or less, ordinary UK supermarket foods, UK names and grams. One line per ingredient, quantity glued to g or ml ("200g chicken breast", "150g fat-free skyr", "1 tsp salt"). Use only these foods: chicken breast, turkey breast, turkey mince, lean beef mince, cod, white fish, prawns, egg white, eggs, porridge oats, fat-free skyr, cottage cheese, rice, pasta, potato, broccoli, spinach, green beans, pepper, onion, courgette, cherry tomatoes, peas, strawberries, blueberries, banana, honey, olive oil, soy sauce, whey protein, salt, black pepper. No creator credit. Do not invent a brand name.`,
+{"title":"","description":"","servings":${servings},"prep_time_mins":10,"cook_time_mins":15,"ingredients":["200g chicken breast"],"method":["Heat the oven to 180°C fan.","Season the chicken and cook it until it is done.","Rest it, then serve."],"coach_note":"","simplicity":"simple","batch_cook":false,"family":true}
+Rules: about 10 ingredients or fewer, 30 minutes or less, ordinary UK supermarket foods, UK names and grams. One line per ingredient, quantity glued to g or ml ("200g chicken breast", "150g fat-free skyr", "1 tsp salt"). The method is at least 3 clear steps in cooking order. Do not number the steps. Oven temperatures are °C fan. Use only these foods: chicken breast, turkey breast, turkey mince, lean beef mince, cod, white fish, prawns, egg white, eggs, porridge oats, fat-free skyr, cottage cheese, rice, pasta, potato, broccoli, spinach, green beans, pepper, onion, courgette, cherry tomatoes, peas, strawberries, blueberries, banana, honey, olive oil, soy sauce, whey protein, salt, black pepper. No creator credit. Do not invent a brand name.`,
     messages: [
       {
         role: "user",
@@ -87,7 +87,7 @@ Rules: about 10 ingredients or fewer, 30 minutes or less, ordinary UK supermarke
   const description = typeof parsed.description === "string" ? parsed.description.trim() : "";
   const ingredients = asStrings(parsed.ingredients).map(normaliseIngredientLine).filter((line): line is string => !!line);
   const method = asStrings(parsed.method).map(normaliseMethodStep).filter((line): line is string => !!line);
-  if (!title || !description || ingredients.length < 3 || method.length < 2) return null;
+  if (!title || !description || ingredients.length < 3 || method.length < MIN_METHOD_STEPS) return null;
   const servingsN = asNumber(parsed.servings) ?? servings;
   const draft = finishDraft(
     {
@@ -142,7 +142,7 @@ export async function generateOriginals(
       try {
         const drafted = await draftOriginal(category, brief, avoid, failure);
         if (!drafted) {
-          failure = "Use only foods with a gram amount that a UK supermarket sells, and include protein.";
+          failure = "Use only foods with a gram amount that a UK supermarket sells, include protein, and write at least 3 clear method steps with oven temperatures in °C fan.";
           continue;
         }
         const filter = filterRecipe({

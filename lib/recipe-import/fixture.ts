@@ -83,7 +83,8 @@ export const FIXTURE_POSTS: SourcePost[] = [
       100g berries
       Method
       1. Stir the oats, skyr, milk and honey in a jar.
-      2. Chill overnight and top with the berries before eating.
+      2. Chill overnight.
+      3. Top with the berries before eating.
     `),
   },
   {
@@ -106,7 +107,8 @@ export const FIXTURE_POSTS: SourcePost[] = [
       40g low fat cottage cheese
       Method
       1. Scramble the egg whites and egg with the spinach.
-      2. Spread the cottage cheese on the wrap, fill and roll.
+      2. Spread the cottage cheese on the wrap.
+      3. Fill the wrap and roll it up.
     `),
   },
   {
@@ -129,7 +131,8 @@ export const FIXTURE_POSTS: SourcePost[] = [
       1 tsp baking powder
       Method
       1. Mash the bananas and mix with the eggs, oats, yoghurt and baking powder.
-      2. Bake in a muffin tin until set.
+      2. Spoon the batter into a muffin tin.
+      3. Bake until set, then cool before eating.
     `),
   },
   {
@@ -151,6 +154,7 @@ export const FIXTURE_POSTS: SourcePost[] = [
       Method
       1. Spoon the cottage cheese into a bowl.
       2. Top with the pineapple and cinnamon.
+      3. Eat straight away.
     `),
   },
   {
@@ -171,7 +175,8 @@ export const FIXTURE_POSTS: SourcePost[] = [
       10g dark chocolate
       Method
       1. Stir the honey through the yoghurt.
-      2. Finish with the chopped chocolate.
+      2. Chop the chocolate.
+      3. Finish the pot with the chocolate.
     `),
   },
   {
@@ -195,6 +200,7 @@ export const FIXTURE_POSTS: SourcePost[] = [
       Method
       1. Cook the pasta and pan-fry the salmon.
       2. Stir in the cream and peas and toss with the pasta.
+      3. Divide between two bowls.
     `),
   },
   {
@@ -232,6 +238,7 @@ export const FIXTURE_POSTS: SourcePost[] = [
       Method
       1. Cook the chicken until browned.
       2. Fry the rice and vegetables, then glaze with honey and soy.
+      3. Toss together and divide into four.
     `),
   },
   {
@@ -255,6 +262,7 @@ export const FIXTURE_POSTS: SourcePost[] = [
       Method
       1. Brown the turkey mince with the soy sauce.
       2. Spoon it into lettuce leaves with cucumber and yoghurt.
+      3. Serve straight away.
     `),
   },
   {
@@ -278,7 +286,8 @@ export const FIXTURE_POSTS: SourcePost[] = [
       80g 0% Greek yoghurt
       Method
       1. Brown the mince in a wide pan.
-      2. Serve in lettuce with cucumber and a spoon of yoghurt.
+      2. Stir through the soy sauce.
+      3. Serve in lettuce with cucumber and a spoon of yoghurt.
     `),
   },
   {
@@ -301,7 +310,8 @@ export const FIXTURE_POSTS: SourcePost[] = [
       1 tsp paprika
       Method
       1. Season and cook the chicken, then slice it.
-      2. Fill the pittas with chicken, lettuce and yoghurt.
+      2. Warm the pittas.
+      3. Fill them with chicken, lettuce and yoghurt.
     `),
   },
   {
@@ -325,6 +335,7 @@ export const FIXTURE_POSTS: SourcePost[] = [
       Method
       1. Brown the turkey with the chilli powder.
       2. Simmer with the tomatoes, beans and peppers until thick.
+      3. Divide into four portions.
     `),
   },
   {
@@ -349,7 +360,8 @@ export const FIXTURE_POSTS: SourcePost[] = [
       1 tbsp light soy sauce
       Method
       1. Cook the rice and drain the tuna.
-      2. Fold through the sweetcorn, cucumber and soy, then split into two boxes.
+      2. Fold through the sweetcorn, cucumber and soy.
+      3. Split into two boxes.
     `),
   },
   {

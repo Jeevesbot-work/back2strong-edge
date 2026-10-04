@@ -18,6 +18,7 @@ export interface CardRecipe {
   carbs_g: number | null;
   fat_g: number | null;
   ingredients: string[];
+  method: string[];
   tags: string[] | null;
   image_url: string | null;
   source_credit: string | null;
@@ -46,14 +47,24 @@ function summary(recipe: CardRecipe): string {
   return `${text.slice(0, 137).trim()}…`;
 }
 
+function methodLines(text: string): string[] {
+  return text
+    .split(/\n/)
+    .map((line) => line.replace(/^\d+[.)]\s+/, "").trim())
+    .filter(Boolean);
+}
+
 export default function RecipeCard({ recipe, preview }: { recipe: CardRecipe; preview?: boolean }) {
   const router = useRouter();
   const flagged = recipe.import_status === "flagged";
   const [title, setTitle] = useState(recipe.title);
   const [category, setCategory] = useState(recipe.category);
+  const [methodText, setMethodText] = useState(recipe.method.join("\n"));
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const minutes = (recipe.prep_time_mins ?? 0) + (recipe.cook_time_mins ?? 0);
+  const methodUnchanged = methodLines(methodText).join("\n") === recipe.method.join("\n");
+  const unchanged = title === recipe.title && category === recipe.category && methodUnchanged;
 
   async function post(body: Record<string, unknown>, key: string) {
     if (preview) return;
@@ -137,6 +148,18 @@ export default function RecipeCard({ recipe, preview }: { recipe: CardRecipe; pr
             </ul>
           </details>
         )}
+        {recipe.method.length > 0 && (
+          <details style={{ marginTop: 8 }}>
+            <summary style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: "#C8965A", cursor: "pointer" }}>
+              {recipe.method.length} {recipe.method.length === 1 ? "step" : "steps"}
+            </summary>
+            <ol style={{ margin: "8px 0 0", paddingLeft: 22 }}>
+              {recipe.method.map((step, index) => (
+                <li key={`${index}-${step}`} style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: "#F2F1ED", lineHeight: 1.45, paddingLeft: 4, marginBottom: 6 }}>{step}</li>
+              ))}
+            </ol>
+          </details>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
           <input
             value={title}
@@ -154,13 +177,30 @@ export default function RecipeCard({ recipe, preview }: { recipe: CardRecipe; pr
               <option key={item} value={item}>{item}</option>
             ))}
           </select>
+          <label style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "#9BA3AF" }}>
+            Method, one step per line
+            <textarea
+              value={methodText}
+              onChange={(event) => setMethodText(event.target.value)}
+              aria-label="Method"
+              rows={Math.min(8, Math.max(4, recipe.method.length + 1))}
+              style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: 6, background: "#111318", color: "#F2F1ED", border: "1px solid #252A32", borderRadius: 12, padding: "12px 14px", fontSize: 16, fontFamily: "Inter, sans-serif", lineHeight: 1.45, resize: "vertical" }}
+            />
+          </label>
           <button
             type="button"
-            disabled={!!loading || preview || (title === recipe.title && category === recipe.category)}
-            onClick={() => post({ id: recipe.id, action: "edit", title, category }, "edit")}
+            disabled={!!loading || preview || unchanged}
+            onClick={() => {
+              const method = methodLines(methodText);
+              if (method.length < 3) {
+                setError("Add at least 3 method steps, one per line");
+                return;
+              }
+              void post({ id: recipe.id, action: "edit", title, category, method }, "edit");
+            }}
             style={{ ...button(false, !!loading || !!preview), flex: "none" }}
           >
-            {loading === "edit" ? "Saving..." : "Save title and category"}
+            {loading === "edit" ? "Saving..." : "Save title, category and method"}
           </button>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
