@@ -9,7 +9,8 @@
     "lint": "next lint",
     "recipes:dry": "tsx scripts/import-recipes.ts --dry",
     "recipes:import": "tsx scripts/import-recipes.ts",
-    "test:recipes": "tsx --test lib/recipe-import/import.test.ts"
+    "test:recipes": "tsx --test lib/recipe-import/import.test.ts",
+    "test:coach": "tsx --test lib/coach/message.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
