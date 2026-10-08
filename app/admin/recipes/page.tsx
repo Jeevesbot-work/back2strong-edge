@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { isAuthorisedAdmin } from "@/lib/admin/auth";
+import { requireAdminPage } from "@/lib/admin/auth";
 import { buildDryRunReport } from "@/lib/recipe-import/run";
 import { createServiceClient } from "@/lib/supabase/service";
 import ApproveAll from "./ApproveAll";
@@ -107,13 +107,7 @@ async function loadPreview(): Promise<PendingRecipe[]> {
 }
 
 export default async function PendingRecipesPage() {
-  if (!(await isAuthorisedAdmin())) {
-    return (
-      <div style={{ minHeight: "100svh", background: S.bg, color: S.text, padding: 32 }}>
-        <p style={{ fontFamily: "Inter, sans-serif" }}>Not authorised.</p>
-      </div>
-    );
-  }
+  await requireAdminPage();
 
   const preview = process.env.RECIPE_REVIEW_PREVIEW === "1";
   let recipes: PendingRecipe[] = [];

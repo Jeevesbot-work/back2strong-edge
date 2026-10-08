@@ -1,6 +1,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
-import { isAuthorisedAdmin } from "@/lib/admin/auth";
+import { isAdminViewer } from "@/lib/admin/auth";
+import { resolvePreviewTarget } from "@/lib/preview-user";
 
 // Performance Blueprint data: the day-90 scoreboard (drives the Home ring) and
 // the client's blood panel + doctor debrief (drives the Your Numbers screen).
@@ -49,10 +50,10 @@ export type DoctorReport = {
  * admin — the client being previewed. Health data never follows an unverified cookie.
  */
 export async function resolveBlueprintUser(): Promise<string | null> {
-  const previewId = cookies().get("preview_user_id")?.value;
-  if (previewId && (await isAuthorisedAdmin())) return previewId;
   const { data: { user } } = await createClient().auth.getUser();
-  return user?.id ?? null;
+  if (!user) return null;
+  const previewId = cookies().get("preview_user_id")?.value;
+  return resolvePreviewTarget(user.id, previewId, await isAdminViewer(user.email));
 }
 
 /** 0–1 progress from baseline to target (0 = Day 1, 1 = target hit). */

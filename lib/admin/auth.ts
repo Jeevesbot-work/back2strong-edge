@@ -1,13 +1,9 @@
 import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ADMIN_COOKIE, ADMIN_EMAILS, adminSessionAllowed, configuredAdminKey } from "@/lib/admin/gate";
 
-export const ADMIN_EMAILS = [
-  "n.adams3@icloud.com",
-  "nicosmada3@googlemail.com",
-  "nick@back2strong.online",
-];
-
-const ACCESS_COOKIE = "b2s_admin_session";
+export { ADMIN_EMAILS };
 
 // Authorises a coach-side admin API request.
 //
@@ -20,26 +16,53 @@ const ACCESS_COOKIE = "b2s_admin_session";
 //     (message client, approve, add task…) would 401 for the one person who
 //     is supposed to be able to press them.
 //
-// Note middleware.ts already gates /api/admin/* on this same cookie, so this
-// is defence in depth rather than the only lock.
+// A missing ADMIN_ACCESS_KEY does not authorise anyone. The cookie only counts
+// when it matches a configured key. Otherwise the caller must be signed in
+// with an admin email.
 export async function isAuthorisedAdmin(): Promise<boolean> {
   const accessKey = process.env.ADMIN_ACCESS_KEY;
-  if (accessKey) {
-    const cookieValue = cookies().get(ACCESS_COOKIE)?.value;
-    if (cookieValue === accessKey) return true;
-  }
+  const cookieValue = cookies().get(ADMIN_COOKIE)?.value;
+  const key = configuredAdminKey(accessKey);
+  if (key && cookieValue === key) return true;
 
+  let email: string | null = null;
   try {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (user && ADMIN_EMAILS.includes(user.email ?? "")) return true;
+    email = user?.email ?? null;
   } catch {
-    // No session / cookie store unavailable — fall through to false.
+    email = null;
   }
 
-  // If no ADMIN_ACCESS_KEY is configured at all, the deployment is still in the
-  // pre-gate "open" state; don't lock the coach out of his own buttons.
-  if (!accessKey) return true;
+  return adminSessionAllowed({ accessKey, cookie: cookieValue, email });
+}
 
-  return false;
+/** Server pages under /admin. Missing proof is a 404, same as the middleware. */
+export async function requireAdminPage(): Promise<void> {
+  if (!(await isAuthorisedAdmin())) notFound();
+}
+
+/**
+ * A real admin: the private-link cookie, or a signed-in admin email.
+ * A missing access key does not make everyone an admin.
+ * Use this before honouring the client-preview cookie or skipping an approval check
+ * on a route a client can call.
+ */
+export async function isAdminViewer(email?: string | null): Promise<boolean> {
+  const accessKey = process.env.ADMIN_ACCESS_KEY;
+  if (accessKey && cookies().get(ADMIN_COOKIE)?.value === accessKey) return true;
+
+  let resolved = email;
+  if (resolved === undefined) {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      resolved = user?.email ?? null;
+    } catch {
+      resolved = null;
+    }
+  }
+
+  if (!resolved) return false;
+  return ADMIN_EMAILS.includes(resolved) || ADMIN_EMAILS.includes(resolved.toLowerCase());
 }
