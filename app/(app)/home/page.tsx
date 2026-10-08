@@ -1,5 +1,5 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { cookies } from "next/headers";
+import { resolveActingClient } from "@/lib/acting-client";
 import Link from "next/link";
 import { getLesson } from "@/lib/data/lessons";
 import { getClientProgramme, blockSessionKeys } from "@/lib/data/programme-loader";
@@ -57,10 +57,8 @@ export default async function HomePage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const cookieStore = cookies();
-  const previewId = cookieStore.get("preview_user_id")?.value;
-  const targetId = previewId ?? user!.id;
-  const db = previewId ? createAdminClient() : supabase;
+  const { targetId, previewing } = await resolveActingClient(user!.id, user!.email);
+  const db = previewing ? createAdminClient() : supabase;
 
   const today = new Date().toISOString().split("T")[0];
 

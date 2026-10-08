@@ -28,6 +28,7 @@ export default function CheckInPage() {
   const [loading, setLoading] = useState(false);
   const [edgeResponse, setEdgeResponse] = useState("");
   const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
 
   const isNotesStep = step === QUESTIONS.length;
   const q = QUESTIONS[step];
@@ -35,13 +36,19 @@ export default function CheckInPage() {
 
   async function submit() {
     setLoading(true);
+    setError("");
     try {
       const res = await fetch("/api/checkin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...scores, notes, weight_kg: weight ? parseFloat(weight) : null }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Couldn't save your check-in. Try again.");
+        setLoading(false);
+        return;
+      }
       setEdgeResponse(data.response ?? "");
     } catch {
       // silently continue — check-in saved even if AI response fails
@@ -144,6 +151,9 @@ export default function CheckInPage() {
               rows={4}
               style={{ width: "100%", background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "14px 16px", color: "#F2F1ED", fontFamily: "Inter, sans-serif", fontSize: 14, outline: "none", resize: "none" as const, marginBottom: 24, boxSizing: "border-box" as const }}
             />
+            {error && (
+              <p style={{ fontSize: 13, color: "#F2F1ED", fontFamily: "Inter, sans-serif", lineHeight: 1.45, marginBottom: 12 }}>{error}</p>
+            )}
             <button
               onClick={submit}
               disabled={loading}

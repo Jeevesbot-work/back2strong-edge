@@ -43,3 +43,28 @@ export async function isAuthorisedAdmin(): Promise<boolean> {
 
   return false;
 }
+
+/**
+ * A real admin: the private-link cookie, or a signed-in admin email.
+ * Unlike isAuthorisedAdmin(), a missing access key does NOT make everyone an admin.
+ * Use this before honouring the client-preview cookie or skipping an approval check
+ * on a route a client can call.
+ */
+export async function isAdminViewer(email?: string | null): Promise<boolean> {
+  const accessKey = process.env.ADMIN_ACCESS_KEY;
+  if (accessKey && cookies().get(ACCESS_COOKIE)?.value === accessKey) return true;
+
+  let resolved = email;
+  if (resolved === undefined) {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      resolved = user?.email ?? null;
+    } catch {
+      resolved = null;
+    }
+  }
+
+  if (!resolved) return false;
+  return ADMIN_EMAILS.includes(resolved) || ADMIN_EMAILS.includes(resolved.toLowerCase());
+}

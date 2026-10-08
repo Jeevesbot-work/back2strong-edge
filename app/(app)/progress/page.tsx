@@ -1,5 +1,5 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { cookies } from "next/headers";
+import { resolveActingClient } from "@/lib/acting-client";
 import { AreaChart } from "./charts";
 import SleepTracker, { type SleepNight } from "./SleepTracker";
 
@@ -22,9 +22,8 @@ export default async function ProgressPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const previewId = cookies().get("preview_user_id")?.value;
-  const targetId = previewId ?? user!.id;
-  const db = previewId ? createAdminClient() : supabase;
+  const { targetId, previewing } = await resolveActingClient(user!.id, user!.email);
+  const db = previewing ? createAdminClient() : supabase;
 
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
