@@ -150,5 +150,8 @@ describe("security wiring", () => {
     assert.match(sql, /consume_daily_ai_use/);
     assert.match(sql, /grant execute on function public\.consume_daily_ai_use\(uuid, text, integer\) to service_role/);
     assert.match(sql, /service role bypasses RLS/);
+    const live = sql.split("-- Rollback (run only to reverse")[0];
+    assert.match(live, /grant execute on function public\.is_trusted_profile_writer\(\) to authenticated/);
+    assert.doesNotMatch(live, /grant execute on function public\.is_trusted_profile_writer\(\) to anon/);
   });
 });

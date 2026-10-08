@@ -1,111 +1,90 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { ADMIN_COOKIE, configuredAdminKey, decideAdminGate } from "@/lib/admin/gate";
 
-// Signed in to the app as one of these emails = Command Centre unlocked too.
-const ADMIN_EMAILS = ["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"];
-
-// Private-link gate for the coach admin area — replaces the old
-// REQUIRE_ADMIN_LOGIN=false "wide open" state with a no-password approach:
-// only someone who has the secret bookmark link (or the cookie it sets) can
-// reach /admin or /api/admin. No login form, nothing to remember day to day.
+// Private-link gate for the coach admin area.
+// A configured ADMIN_ACCESS_KEY lets the coach's bookmark cookie (or ?key=)
+// open /admin. A signed-in admin email also opens it, and when the key is set
+// that session stores the same cookie.
 //
-// Setup (one-time): set ADMIN_ACCESS_KEY in the Vercel project's environment
-// variables to a long random string. Then the coach's one-time bootstrap URL
-// is:  https://app.back2strong.online/admin?key=THAT_STRING
+// A missing ADMIN_ACCESS_KEY does not open the gate. Anonymous requests to
+// /admin and /api/admin are 404. The client app on / stays public.
+//
+// Setup: set ADMIN_ACCESS_KEY in the Vercel project's environment variables
+// to a long random string. The coach's one-time bootstrap URL is:
+//   https://app.back2strong.online/admin?key=THAT_STRING
 // Visiting it sets a 1-year cookie and redirects to the clean /admin URL.
-// Bookmark /admin after that — the cookie does the rest.
 
-const COOKIE_NAME = "b2s_admin_session";
 const ONE_YEAR = 60 * 60 * 24 * 365;
+
+function withAdminCookie(res: NextResponse, accessKey: string) {
+  res.cookies.set(ADMIN_COOKIE, accessKey, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: ONE_YEAR,
+    path: "/",
+  });
+  return res;
+}
 
 export async function middleware(req: NextRequest) {
   const { pathname, searchParams } = req.nextUrl;
-  const accessKey = process.env.ADMIN_ACCESS_KEY;
-  const isRoot = pathname === "/";
-
-  // If no key is configured, don't lock the founder out — just pass through.
-  // (Set ADMIN_ACCESS_KEY in Vercel to turn the gate on.)
-  if (!accessKey) return NextResponse.next();
-
-  const cookieValue = req.cookies.get(COOKIE_NAME)?.value;
-  if (cookieValue === accessKey) {
-    // Recognised coach device landing on the front door — send them straight to
-    // the Command Centre. Means a plain bookmark of the bare domain opens the
-    // dashboard rather than the client-facing app, so there's only ever one
-    // address to remember.
-    if (isRoot) {
-      const adminUrl = req.nextUrl.clone();
-      adminUrl.pathname = "/admin";
-      adminUrl.search = "";
-      return NextResponse.redirect(adminUrl);
-    }
-    return NextResponse.next();
-  }
-
+  const accessKey = configuredAdminKey(process.env.ADMIN_ACCESS_KEY);
+  const cookie = req.cookies.get(ADMIN_COOKIE)?.value;
   const keyParam = searchParams.get("key");
-  if (keyParam === accessKey) {
-    const setCookie = (res: NextResponse) => {
-      res.cookies.set(COOKIE_NAME, accessKey, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "lax",
-        maxAge: ONE_YEAR,
-        path: "/",
-      });
-      return res;
-    };
 
-    // "stay=1" — serve the dashboard WITHOUT redirecting, so the key remains in
-    // the address bar. This exists for iOS "Add to Home Screen": a saved web app
-    // can keep its own cookie store separate from Safari's, so a cookie alone
-    // isn't dependable there. Keeping the key in the saved URL means the icon
-    // re-authorises itself on every launch and can never fall out of access.
-    if (searchParams.get("stay") === "1") {
-      if (isRoot) {
-        const target = req.nextUrl.clone();
-        target.pathname = "/admin";
-        // Rewrite, not redirect: the browser keeps showing the original URL
-        // (key intact) while being served the Command Centre.
-        return setCookie(NextResponse.rewrite(target));
-      }
-      return setCookie(NextResponse.next());
+  let email: string | null = null;
+  const cookieOk = !!accessKey && cookie === accessKey;
+  const keyParamOk = !!accessKey && keyParam === accessKey;
+  if (!cookieOk && !keyParamOk) {
+    try {
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} } },
+      );
+      const { data: { user } } = await supabase.auth.getUser();
+      email = user?.email ?? null;
+    } catch {
+      // Supabase unreachable — fall through. A matching cookie was already handled.
     }
-
-    // Normal desktop path: set the cookie and redirect to the clean URL so the
-    // secret never lingers in browser history or gets shared by accident.
-    const cleanUrl = req.nextUrl.clone();
-    cleanUrl.searchParams.delete("key");
-    // Arriving at the bare domain with the key should land on the dashboard,
-    // not the client app front page.
-    if (isRoot) cleanUrl.pathname = "/admin";
-    return setCookie(NextResponse.redirect(cleanUrl));
   }
 
-  // Second way in: signed in to the app (magic link) with an admin email.
-  // Unlocks this browser for a year, exactly like the private link does.
-  try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} } },
-    );
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) {
-      const res = isRoot ? NextResponse.redirect(new URL("/admin", req.url)) : NextResponse.next();
-      res.cookies.set(COOKIE_NAME, accessKey, { httpOnly: true, secure: true, sameSite: "lax", maxAge: ONE_YEAR, path: "/" });
-      return res;
-    }
-  } catch {
-    // Supabase unreachable — fall through to the normal lock.
+  const decision = decideAdminGate({
+    pathname,
+    accessKey,
+    cookie,
+    keyParam,
+    stay: searchParams.get("stay") === "1",
+    email,
+  });
+
+  if (decision.kind === "deny") {
+    return new NextResponse("Not found", { status: decision.status });
   }
 
-  // The bare domain must stay public — it's the clients' app. Only the admin
-  // paths get hidden.
-  if (isRoot) return NextResponse.next();
+  if (decision.kind === "public") return NextResponse.next();
 
-  // No valid cookie or key — pretend this doesn't exist rather than showing
-  // a login page (a 404 gives a stranger nothing to probe).
-  return new NextResponse("Not found", { status: 404 });
+  const stamp = (res: NextResponse) => (
+    decision.setCookie && accessKey ? withAdminCookie(res, accessKey) : res
+  );
+
+  if (decision.kind === "rewrite") {
+    const target = req.nextUrl.clone();
+    target.pathname = "/admin";
+    return stamp(NextResponse.rewrite(target));
+  }
+
+  if (decision.kind === "redirect") {
+    const url = req.nextUrl.clone();
+    url.pathname = decision.pathname;
+    if (decision.clearSearch) url.search = "";
+    else if (decision.stripKey) url.searchParams.delete("key");
+    return stamp(NextResponse.redirect(url));
+  }
+
+  return stamp(NextResponse.next());
 }
 
 export const config = {

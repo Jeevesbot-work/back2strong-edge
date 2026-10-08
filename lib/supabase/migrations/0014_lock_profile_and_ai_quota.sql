@@ -194,7 +194,13 @@ create trigger profiles_protect_admin_columns
   before insert or update on public.profiles
   for each row execute procedure public.protect_profile_admin_columns();
 
+-- The guard trigger is not SECURITY DEFINER, so it runs as the signed-in
+-- client and calls this function. Clients need EXECUTE, or every profile
+-- save fails with "permission denied for function is_trusted_profile_writer".
+-- The function only reports whether the caller is the service role or the
+-- SQL editor. It does not write anything. Anon stays revoked.
 revoke all on function public.is_trusted_profile_writer() from public, anon, authenticated;
+grant execute on function public.is_trusted_profile_writer() to authenticated;
 revoke all on function public.protect_profile_admin_columns() from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -261,10 +267,20 @@ grant execute on function public.consume_daily_ai_use(uuid, text, integer) to se
 -- drop function if exists public.is_trusted_profile_writer();
 -- drop policy if exists "Users can update own profile" on public.profiles;
 -- drop policy if exists "Users can insert own profile" on public.profiles;
--- create policy "Users can update own profile" on public.profiles
+-- drop policy if exists "update own profile" on public.profiles;
+-- drop policy if exists "insert own profile" on public.profiles;
+-- create policy "update own profile" on public.profiles
 --   for update using (auth.uid() = id);
--- create policy "Users can insert own profile" on public.profiles
+-- create policy "insert own profile" on public.profiles
 --   for insert with check (auth.uid() = id);
+-- revoke update (
+--   id, email, full_name, age, goal, training_state, injuries, days_per_week,
+--   commitment_answer, body_weight_kg, protein_target, calorie_target
+-- ) on table public.profiles from authenticated;
+-- revoke insert (
+--   id, email, full_name, age, goal, training_state, injuries, days_per_week,
+--   commitment_answer, body_weight_kg, protein_target, calorie_target
+-- ) on table public.profiles from authenticated;
 -- grant insert, update on table public.profiles to anon, authenticated;
 -- drop function if exists public.consume_daily_ai_use(uuid, text, integer);
 -- drop table if exists public.ai_daily_usage;
