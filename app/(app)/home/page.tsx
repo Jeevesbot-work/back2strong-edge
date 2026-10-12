@@ -5,7 +5,8 @@ import { getLesson } from "@/lib/data/lessons";
 import { getClientProgramme, blockSessionKeys } from "@/lib/data/programme-loader";
 import { RevealGroup } from "@/components/Reveal";
 import WalkLogger from "@/components/WalkLogger";
-import DayList, { type DayTask } from "@/components/DayList";
+import DayLoop, { type DayTask, type MorningReport } from "@/components/DayLoop";
+import { ukDate, reportTargetDate } from "@/lib/day-dates";
 import BlueprintCard from "@/components/blueprint/BlueprintCard";
 import { getScoreboard, resolveBlueprintUser } from "@/lib/blueprint";
 
@@ -65,10 +66,9 @@ export default async function HomePage() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Day list uses UK dates so "tomorrow" means tomorrow where the member is.
-  const ukDate = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+  // Close-the-day loop uses UK dates. listTonight = the morning a brain-dump right now is for.
   const listToday = ukDate(new Date());
-  const listTomorrow = ukDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
+  const listTonight = reportTargetDate();
 
   const [
     { data: profile },
@@ -88,11 +88,14 @@ export default async function HomePage() {
     db.from("walk_logs").select("minutes").eq("user_id", targetId).eq("date", today),
   ]);
 
-  const [{ data: dayTasks }, { data: protocols }] = await Promise.all([
-    db.from("day_tasks").select("id, text, done, position, for_date").eq("user_id", targetId).in("for_date", [listToday, listTomorrow]).order("position"),
+  const [{ data: dayTasks }, { data: dayReports }, { data: protocols }] = await Promise.all([
+    db.from("day_tasks").select("id, text, done, position, for_date").eq("user_id", targetId).in("for_date", [listToday, listTonight]).order("position"),
+    db.from("day_reports").select("for_date, report").eq("user_id", targetId).in("for_date", [listToday, listTonight]),
     db.from("protocols").select("slug, title, subtitle, total_time_label").eq("published", true).order("created_at"),
   ]);
   const tasksFor = (d: string) => (dayTasks ?? []).filter((t) => t.for_date === d).map(({ for_date: _f, ...t }) => t as DayTask);
+  const reportFor = (d: string) => ((dayReports ?? []).find((r) => r.for_date === d)?.report ?? null) as MorningReport | null;
+  const tonightIsToday = listTonight === listToday; // after midnight, before 4am
 
   const walkMinutesToday = (todayWalks ?? []).reduce((s, w) => s + (w.minutes ?? 0), 0);
 
@@ -275,9 +278,15 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Today's list + voice brain-dump for tomorrow */}
+        {/* Morning report + "Close the day" voice brain-dump */}
         <div>
-          <DayList todayDate={listToday} tomorrowDate={listTomorrow} initialToday={tasksFor(listToday)} initialTomorrow={tasksFor(listTomorrow)} />
+          <DayLoop
+            dateLabel={new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/London" })}
+            todayTasks={tonightIsToday ? [] : tasksFor(listToday)}
+            todayReport={tonightIsToday ? null : reportFor(listToday)}
+            tonightReport={reportFor(listTonight)}
+            tonightTaskCount={tasksFor(listTonight).length}
+          />
         </div>
 
         {/* Quick walk logger */}
