@@ -5,6 +5,7 @@ import { getLesson } from "@/lib/data/lessons";
 import { getClientProgramme, blockSessionKeys } from "@/lib/data/programme-loader";
 import { RevealGroup } from "@/components/Reveal";
 import WalkLogger from "@/components/WalkLogger";
+import DayList, { type DayTask } from "@/components/DayList";
 import BlueprintCard from "@/components/blueprint/BlueprintCard";
 import { getScoreboard, resolveBlueprintUser } from "@/lib/blueprint";
 
@@ -64,6 +65,11 @@ export default async function HomePage() {
 
   const today = new Date().toISOString().split("T")[0];
 
+  // Day list uses UK dates so "tomorrow" means tomorrow where the member is.
+  const ukDate = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+  const listToday = ukDate(new Date());
+  const listTomorrow = ukDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
+
   const [
     { data: profile },
     { data: programme },
@@ -81,6 +87,12 @@ export default async function HomePage() {
     db.from("nutrition_logs").select("protein_g, calories").eq("user_id", targetId).eq("date", today),
     db.from("walk_logs").select("minutes").eq("user_id", targetId).eq("date", today),
   ]);
+
+  const [{ data: dayTasks }, { data: protocols }] = await Promise.all([
+    db.from("day_tasks").select("id, text, done, position, for_date").eq("user_id", targetId).in("for_date", [listToday, listTomorrow]).order("position"),
+    db.from("protocols").select("slug, title, subtitle, total_time_label").eq("published", true).order("created_at"),
+  ]);
+  const tasksFor = (d: string) => (dayTasks ?? []).filter((t) => t.for_date === d).map(({ for_date: _f, ...t }) => t as DayTask);
 
   const walkMinutesToday = (todayWalks ?? []).reduce((s, w) => s + (w.minutes ?? 0), 0);
 
@@ -263,6 +275,11 @@ export default async function HomePage() {
           </div>
         </div>
 
+        {/* Today's list + voice brain-dump for tomorrow */}
+        <div>
+          <DayList todayDate={listToday} tomorrowDate={listTomorrow} initialToday={tasksFor(listToday)} initialTomorrow={tasksFor(listTomorrow)} />
+        </div>
+
         {/* Quick walk logger */}
         <div>
           <WalkLogger initialMinutes={walkMinutesToday} />
@@ -414,6 +431,37 @@ export default async function HomePage() {
             </div>
           </Link>
         </div>
+
+        {/* Protocols — short guides, managed from Supabase */}
+        {(protocols?.length ?? 0) > 0 && (
+          <div>
+            <p style={{ fontSize: 9, color: "#9BA3AF", textTransform: "uppercase", letterSpacing: "0.2em", fontFamily: "Inter, sans-serif", margin: "8px 0 10px 2px" }}>
+              Protocols
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {protocols!.map((pr) => (
+                <Link key={pr.slug} href={`/protocols/${pr.slug}`} className="block pressable">
+                  <div style={{ background: "#171B21", borderRadius: 20, border: "1px solid #252A32", padding: "16px 18px", display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 19, color: "#F2F1ED", fontWeight: 400, lineHeight: 1.2 }}>{pr.title}</p>
+                      {pr.subtitle && (
+                        <p style={{ fontSize: 12, color: "#9BA3AF", fontFamily: "Inter, sans-serif", marginTop: 4, lineHeight: 1.45 }}>{pr.subtitle}</p>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
+                      {pr.total_time_label && (
+                        <span style={{ fontSize: 9, color: "#C8965A", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "Inter, sans-serif" }}>{pr.total_time_label}</span>
+                      )}
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} style={{ width: 18, height: 18, color: "#9BA3AF" }}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
       </RevealGroup>
     </div>
