@@ -72,6 +72,20 @@ const SECTIONS = [
     ],
     accent: "#C8965A",
   },
+  {
+    nav: "Today",
+    href: "/home",
+    title: "Close the day. Wake up to a plan.",
+    description:
+      "Before bed, tap Close the day on your Today screen and talk it all out — jobs for tomorrow, how today went, anything on your mind. Then switch off. In the morning there's a report waiting with your to-do list, your first move, and a practical fix for whatever was bugging you.",
+    steps: [
+      "Tap Close the day on Today, hit the mic and just talk — no need to tidy it up",
+      "Tap Done — switch off. Edge sorts it while you sleep",
+      "Next morning, your Morning report is on Today — tick off the list as you go",
+      "Bad nights? Open Broken Sleep Survival at the bottom of Today",
+    ],
+    accent: "#C8965A",
+  },
 ];
 
 export default async function GuidePage() {
