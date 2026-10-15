@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@/lib/supabase/server";
 import { buildSystemPrompt } from "@/lib/claude/prompts";
+import { requireActiveClient } from "@/lib/ai/access";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 export async function POST(req: NextRequest) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
+  const access = await requireActiveClient();
+  if (!access.ok) return access.response;
+  const { supabase, userId } = access;
 
   const body = await req.json();
   const { sleep_quality, morning_energy, stress_level, soreness, motivation, notes, weight_kg } = body;
@@ -26,11 +26,11 @@ Maximum 2 sentences. Reference his specific scores or notes if relevant.`;
 
   const [{ data: profile }, { data: programme }, { data: recentCheckIns }, { data: recentSessions }, { count: messageCount }] =
     await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).single(),
-      supabase.from("programme_state").select("*").eq("user_id", user.id).single(),
-      supabase.from("check_ins").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(7),
-      supabase.from("training_sessions").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(5),
-      supabase.from("messages").select("*", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("profiles").select("*").eq("id", userId).single(),
+      supabase.from("programme_state").select("*").eq("user_id", userId).single(),
+      supabase.from("check_ins").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(7),
+      supabase.from("training_sessions").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(5),
+      supabase.from("messages").select("*", { count: "exact", head: true }).eq("user_id", userId),
     ]);
 
   const systemPrompt = buildSystemPrompt({
@@ -53,7 +53,7 @@ Maximum 2 sentences. Reference his specific scores or notes if relevant.`;
   const edgeResponse = aiResponse.content[0].type === "text" ? aiResponse.content[0].text : "";
 
   const { error } = await supabase.from("check_ins").upsert({
-    user_id: user.id,
+    user_id: userId,
     date: today,
     sleep_quality,
     morning_energy,
@@ -72,7 +72,7 @@ Maximum 2 sentences. Reference his specific scores or notes if relevant.`;
     const { error: wErr } = await supabase
       .from("check_ins")
       .update({ weight_kg })
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("date", today);
     if (wErr) console.warn("[checkin] weight_kg not saved (column missing?):", wErr.message);
   }

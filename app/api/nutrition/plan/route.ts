@@ -9,8 +9,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@/lib/supabase/server";
 import { SLOTS, DAY_LABELS_LONG, type Plan } from "@/lib/meal-plan";
+import { requireActiveClient } from "@/lib/ai/access";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -18,17 +18,17 @@ type Slot = (typeof SLOTS)[number];
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
+    const access = await requireActiveClient();
+    if (!access.ok) return access.response;
+    const { supabase, userId } = access;
 
     const { instruction, weekStart } = (await req.json()) as { instruction?: string; weekStart?: string };
     if (!instruction?.trim() || !weekStart) return NextResponse.json({ error: "Missing instruction or week" }, { status: 400 });
 
     const [{ data: recipes }, { data: existing }, { data: profile }] = await Promise.all([
       supabase.from("recipes").select("id,title,category,calories,protein_g,tags,description").eq("published", true),
-      supabase.from("meal_plans").select("day,slot,recipe_id,custom_title").eq("user_id", user.id).eq("week_start", weekStart),
-      supabase.from("profiles").select("full_name,goal,protein_target,calorie_target,injuries").eq("id", user.id).single(),
+      supabase.from("meal_plans").select("day,slot,recipe_id,custom_title").eq("user_id", userId).eq("week_start", weekStart),
+      supabase.from("profiles").select("full_name,goal,protein_target,calorie_target,injuries").eq("id", userId).single(),
     ]);
 
     if (!recipes?.length) return NextResponse.json({ error: "No recipes available" }, { status: 500 });
@@ -87,7 +87,7 @@ ${current}`;
       for (const slot of SLOTS) {
         const raw = d[slot];
         const id = typeof raw === "string" && validIds.has(raw) && byId.get(raw)?.category === slot ? raw : null;
-        rows.push({ user_id: user.id, week_start: weekStart, day, slot, recipe_id: id, custom_title: null, updated_at: now });
+        rows.push({ user_id: userId, week_start: weekStart, day, slot, recipe_id: id, custom_title: null, updated_at: now });
       }
     }
 

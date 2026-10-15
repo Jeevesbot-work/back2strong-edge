@@ -1,8 +1,8 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { resolveActingClient } from "@/lib/acting-client";
 import { getClientProgramme, getProgrammeWeek, blockSessionKeys } from "@/lib/data/programme-loader";
-import { BARRY_PROGRAMME } from "@/lib/data/barry-programme";
 import SessionCards from "@/components/SessionCards";
-import { cookies } from "next/headers";
+import AwaitingProgramme from "@/components/AwaitingProgramme";
 import Link from "next/link";
 import { RevealGroup } from "@/components/Reveal";
 
@@ -25,12 +25,11 @@ export default async function TrainPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const cookieStore = cookies();
-  const previewId = cookieStore.get("preview_user_id")?.value;
-  const targetId = previewId ?? user!.id;
-  const db = previewId ? createAdminClient() : supabase;
+  const { targetId, previewing } = await resolveActingClient(user!.id, user!.email);
+  const db = previewing ? createAdminClient() : supabase;
 
   const clientProgramme = await getClientProgramme(targetId);
+  if (!clientProgramme) return <AwaitingProgramme />;
 
   const [
     { data: recentSessions },
@@ -50,7 +49,7 @@ export default async function TrainPage() {
       .single(),
   ]);
 
-  const { programme: prog, sessions } = clientProgramme ?? { programme: BARRY_PROGRAMME, sessions: {} };
+  const { programme: prog, sessions } = clientProgramme;
 
   const currentWeek = Math.max(1, Math.min(progState?.current_week ?? 1, prog.lengthWeeks));
   const weekInfo = getProgrammeWeek(prog, currentWeek);

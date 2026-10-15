@@ -1,6 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { requireAdminPage } from "@/lib/admin/auth";
 import Link from "next/link";
 import ApproveButton from "./ApproveButton";
 import AddNoteForm from "./AddNoteForm";
@@ -13,12 +12,7 @@ import WeightTrendChart from "./WeightTrendChart";
 import FuelReportPanel from "./FuelReportPanel";
 
 export default async function AdminUserPage({ params }: { params: { id: string } }) {
-  // TEMP: single-user open access — set back to true to re-gate behind admin
-  // login. While false, anyone with the URL can read this client's data.
-  const REQUIRE_ADMIN_LOGIN = false;
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (REQUIRE_ADMIN_LOGIN && (!user || !["n.adams3@icloud.com","nicosmada3@googlemail.com","nick@back2strong.online"].includes(user.email ?? ""))) redirect("/login");
+  await requireAdminPage();
 
   const admin = createAdminClient();
   const userId = params.id;

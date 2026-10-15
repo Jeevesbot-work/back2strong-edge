@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@/lib/supabase/server";
+import { requireActiveClient } from "@/lib/ai/access";
+import { enforceDailyCap } from "@/lib/ai/quota";
 
 // "Tell Edge what you ate" — spoken or typed food logging.
 //
@@ -32,9 +33,9 @@ const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : Number(v
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
+    const access = await requireActiveClient();
+    if (!access.ok) return access.response;
+    const { supabase, userId, isAdmin } = access;
 
     const body = await req.json();
 
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
       const items: Item[] = Array.isArray(body.items) ? body.items.slice(0, 15) : [];
       if (!items.length) return NextResponse.json({ error: "Nothing to log" }, { status: 400 });
       const rows = items.map((i) => ({
-        user_id: user.id,
+        user_id: userId,
         meal_name: String(i.meal_name ?? "Food").slice(0, 120),
         calories: Math.max(0, Math.round(num(i.calories))),
         protein_g: Math.max(0, Math.round(num(i.protein_g) * 10) / 10),
@@ -60,6 +61,11 @@ export async function POST(req: NextRequest) {
     const answer = String(body.answer ?? "").trim().slice(0, 300);
     if (!text) return NextResponse.json({ error: "Say or type what you ate" }, { status: 400 });
     if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "AI not configured" }, { status: 500 });
+
+    if (!isAdmin) {
+      const limited = await enforceDailyCap(supabase, userId, "food");
+      if (limited) return limited;
+    }
 
     const prompt = `You are the food logger in a men's fitness coaching app (UK). A member has told you, in their own words (often dictated by voice, so expect missing punctuation and speech-to-text slips), what they ate.
 

@@ -22,6 +22,7 @@ export default function EdgePage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState("");
+  const [error, setError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -48,6 +49,7 @@ export default function EdgePage() {
     const msg = (text ?? input).trim();
     if (!msg || loading) return;
     setInput("");
+    setError("");
     setLoading(true);
 
     const tempUser: Message = {
@@ -65,7 +67,14 @@ export default function EdgePage() {
         body: JSON.stringify({ message: msg }),
       });
 
-      if (!res.ok || !res.body) throw new Error("Failed");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setMessages((prev) => prev.filter((m) => m.id !== tempUser.id));
+        setInput(msg);
+        setError(data.error || "Couldn't send that. Try again.");
+        return;
+      }
+      if (!res.body) throw new Error("Failed");
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -189,6 +198,11 @@ export default function EdgePage() {
 
       {/* Input */}
       <div style={{ padding: "12px 16px", borderTop: "1px solid #252A32", background: "#0E1014", flexShrink: 0, paddingBottom: "max(env(safe-area-inset-bottom, 0px), 80px)" }}>
+        {error && (
+          <p style={{ fontSize: 13, color: "#F2F1ED", fontFamily: "Inter, sans-serif", lineHeight: 1.45, background: "#171B21", border: "1px solid rgba(200,150,90,0.35)", borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
+            {error}
+          </p>
+        )}
         <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
           <textarea
             ref={inputRef}

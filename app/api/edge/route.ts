@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@/lib/supabase/server";
 import { buildSystemPrompt } from "@/lib/claude/prompts";
 import { weekStartOf, DAY_LABELS_LONG } from "@/lib/meal-plan";
+import { requireActiveClient } from "@/lib/ai/access";
+import { enforceDailyCap } from "@/lib/ai/quota";
+import { saveCompletedReply } from "@/lib/ai/persist-reply";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
+    const access = await requireActiveClient();
+    if (!access.ok) return access.response;
+    const { supabase, userId, email, isAdmin } = access;
 
     const { message } = await req.json();
     if (!message?.trim()) return NextResponse.json({ error: "No message" }, { status: 400 });
@@ -33,21 +35,21 @@ export async function POST(req: NextRequest) {
       { data: recentWalks },
       { data: plannedRows },
     ] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).single(),
-      supabase.from("programme_state").select("*").eq("user_id", user.id).single(),
-      supabase.from("check_ins").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(7),
-      supabase.from("training_sessions").select("*").eq("user_id", user.id).not("completed_at", "is", null).order("completed_at", { ascending: false }).limit(5),
-      supabase.from("lesson_completions").select("*").eq("user_id", user.id),
-      supabase.from("admin_notes").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-      supabase.from("messages").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
-      supabase.from("messages").select("*", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("nutrition_logs").select("date, protein_g, calories, meal_name").eq("user_id", user.id).gte("date", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)).order("date", { ascending: true }),
-      supabase.from("walk_logs").select("minutes").eq("user_id", user.id).gte("date", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)),
-      supabase.from("meal_plans").select("day, slot, recipes(title)").eq("user_id", user.id).eq("week_start", weekStartOf()).not("recipe_id", "is", null),
+      supabase.from("profiles").select("*").eq("id", userId).single(),
+      supabase.from("programme_state").select("*").eq("user_id", userId).single(),
+      supabase.from("check_ins").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(7),
+      supabase.from("training_sessions").select("*").eq("user_id", userId).not("completed_at", "is", null).order("completed_at", { ascending: false }).limit(5),
+      supabase.from("lesson_completions").select("*").eq("user_id", userId),
+      supabase.from("admin_notes").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
+      supabase.from("messages").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(20),
+      supabase.from("messages").select("*", { count: "exact", head: true }).eq("user_id", userId),
+      supabase.from("nutrition_logs").select("date, protein_g, calories, meal_name").eq("user_id", userId).gte("date", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)).order("date", { ascending: true }),
+      supabase.from("walk_logs").select("minutes").eq("user_id", userId).gte("date", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)),
+      supabase.from("meal_plans").select("day, slot, recipes(title)").eq("user_id", userId).eq("week_start", weekStartOf()).not("recipe_id", "is", null),
     ]);
 
     const systemPrompt = buildSystemPrompt({
-      profile: profile ?? { id: user.id, email: user.email ?? "", full_name: null, age: null, goal: null, injuries: null, training_state: null, days_per_week: 3, commitment_answer: null, approved: true, created_at: "", updated_at: "" },
+      profile: profile ?? { id: userId, email, full_name: null, age: null, goal: null, injuries: null, training_state: null, days_per_week: 3, commitment_answer: null, approved: true, created_at: "", updated_at: "" },
       programme: programme ?? null,
       recentCheckIns: recentCheckIns ?? [],
       recentSessions: recentSessions ?? [],
@@ -67,7 +69,12 @@ export async function POST(req: NextRequest) {
       .reverse()
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-    await supabase.from("messages").insert({ user_id: user.id, role: "user", content: message });
+    if (!isAdmin) {
+      const limited = await enforceDailyCap(supabase, userId, "coach");
+      if (limited) return limited;
+    }
+
+    await supabase.from("messages").insert({ user_id: userId, role: "user", content: message });
 
     const stream = await anthropic.messages.stream({
       model: "claude-sonnet-4-6",
@@ -79,20 +86,48 @@ export async function POST(req: NextRequest) {
     let full = "";
     const encoder = new TextEncoder();
 
+    // Save the reply before closing the stream. Closing first lets the
+    // serverless runtime freeze the function before the insert finishes,
+    // which is how completed coach replies were being lost.
     const readable = new ReadableStream({
       async start(controller) {
+        let completed = false;
+        let clientGone = false;
         try {
           for await (const chunk of stream) {
             if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
               full += chunk.delta.text;
-              controller.enqueue(encoder.encode(chunk.delta.text));
+              if (!clientGone) {
+                try {
+                  controller.enqueue(encoder.encode(chunk.delta.text));
+                } catch (enqueueErr) {
+                  clientGone = true;
+                  console.error("[edge] client disconnected while streaming:", enqueueErr);
+                }
+              }
             }
           }
-          controller.close();
-          await supabase.from("messages").insert({ user_id: user.id, role: "assistant", content: full });
+          completed = true;
         } catch (streamErr) {
           console.error("[edge] Stream error:", streamErr);
-          controller.close();
+        } finally {
+          if (completed) {
+            await saveCompletedReply(full, async (text) => {
+              const { error } = await supabase.from("messages").insert({
+                user_id: userId,
+                role: "assistant",
+                content: text,
+              });
+              return error ? { message: error.message } : null;
+            });
+          } else {
+            console.error("[edge] assistant reply not saved; the model stream did not finish");
+          }
+          try {
+            controller.close();
+          } catch (closeErr) {
+            console.error("[edge] stream close failed:", closeErr);
+          }
         }
       },
     });

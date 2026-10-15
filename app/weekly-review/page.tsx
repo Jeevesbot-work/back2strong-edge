@@ -8,6 +8,7 @@ export default function WeeklyReviewPage() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState({ wentWell: "", gotInWay: "", commitment: "" });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const questions = [
     { key: "wentWell", label: "What went well this week?", placeholder: "Training, sleep, mindset, relationships — anything that moved..." },
@@ -19,13 +20,35 @@ export default function WeeklyReviewPage() {
 
   async function finish() {
     setSaving(true);
-    // Store in messages as a structured journal entry
+    setError("");
+    // Store in messages as a structured journal entry.
+    // Read the body to the end before leaving: fetch resolves on the headers,
+    // and navigating away then aborts the stream before the reply is saved.
     const summary = `WEEKLY REVIEW:\nWent well: ${answers.wentWell}\nGot in way: ${answers.gotInWay}\nCommitment: ${answers.commitment}`;
-    await fetch("/api/edge", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: summary }),
-    });
+    try {
+      const res = await fetch("/api/edge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: summary }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        let message = "Couldn't save your review. Try again.";
+        try {
+          const data = JSON.parse(text) as { error?: string };
+          if (data.error) message = data.error;
+        } catch {
+          // The body wasn't JSON.
+        }
+        setError(message);
+        setSaving(false);
+        return;
+      }
+    } catch {
+      setError("Couldn't save your review. Check your connection and try again.");
+      setSaving(false);
+      return;
+    }
     setSaving(false);
     router.push("/progress");
   }
@@ -70,13 +93,18 @@ export default function WeeklyReviewPage() {
               Next
             </button>
           ) : (
-            <button
-              onClick={finish}
-              disabled={saving}
-              className="w-full bg-edge-bronze text-edge-bg font-condensed font-bold text-xl uppercase tracking-widest py-4 rounded-xl disabled:opacity-50 active:scale-95"
-            >
-              {saving ? "Saving..." : "Submit Review"}
-            </button>
+            <>
+              {error && (
+                <p className="text-white/80 font-body text-sm mb-3 leading-relaxed">{error}</p>
+              )}
+              <button
+                onClick={finish}
+                disabled={saving}
+                className="w-full bg-edge-bronze text-edge-bg font-condensed font-bold text-xl uppercase tracking-widest py-4 rounded-xl disabled:opacity-50 active:scale-95"
+              >
+                {saving ? "Saving..." : "Submit Review"}
+              </button>
+            </>
           )}
         </div>
       </div>

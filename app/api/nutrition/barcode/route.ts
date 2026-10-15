@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireActiveClient } from "@/lib/ai/access";
 
 // Look up a scanned barcode against Open Food Facts (free, strong UK coverage)
 // and return clean macros. No AI, no cost — exact label data straight back.
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
+    const access = await requireActiveClient();
+    if (!access.ok) return access.response;
 
     const { barcode } = await req.json();
     if (!barcode || !/^\d{6,14}$/.test(String(barcode))) {

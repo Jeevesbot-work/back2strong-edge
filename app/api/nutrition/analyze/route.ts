@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@/lib/supabase/server";
+import { requireActiveClient } from "@/lib/ai/access";
+import { enforceDailyCap } from "@/lib/ai/quota";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -15,9 +16,9 @@ const JSON_SCHEMA = `{
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
+    const access = await requireActiveClient();
+    if (!access.ok) return access.response;
+    const { supabase, userId, isAdmin } = access;
 
     if (!process.env.ANTHROPIC_API_KEY) {
       console.error("[nutrition] ANTHROPIC_API_KEY not set");
@@ -27,6 +28,11 @@ export async function POST(req: NextRequest) {
     const { image, mimeType, text } = await req.json();
 
     if (!image && !text) return NextResponse.json({ error: "No image or description provided" }, { status: 400 });
+
+    if (!isAdmin) {
+      const limited = await enforceDailyCap(supabase, userId, "food");
+      if (limited) return limited;
+    }
 
     let raw: string;
 
@@ -98,7 +104,7 @@ Be realistic with estimates. If you cannot identify food clearly, give your best
     const { data: log, error } = await supabase
       .from("nutrition_logs")
       .insert({
-        user_id: user.id,
+        user_id: userId,
         meal_name: analysis.meal_name,
         calories: Math.round(analysis.calories),
         protein_g: analysis.protein_g,

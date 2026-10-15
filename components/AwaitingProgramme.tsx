@@ -20,11 +20,10 @@ export default function AwaitingProgramme() {
           </svg>
         </div>
         <h2 style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 22, fontWeight: 400, color: "#F2F1ED", lineHeight: 1.2, marginBottom: 8 }}>
-          Your programme is on its way.
+          Your plan is being prepared.
         </h2>
         <p style={{ fontSize: 13, color: "rgba(242,241,237,0.6)", fontFamily: "Inter, sans-serif", lineHeight: 1.6 }}>
-          Nick is building your plan from your audit. It&apos;ll appear here as soon as it&apos;s ready —
-          you&apos;ll be the first to know.
+          It will show up here when it&apos;s ready. You don&apos;t need to do anything until then.
         </p>
       </div>
     </div>

@@ -1,5 +1,5 @@
-import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { createAdminClient } from "@/lib/supabase/server";
+import { requireAdminPage } from "@/lib/admin/auth";
 import Link from "next/link";
 
 const GOAL_LABEL: Record<string, string> = {
@@ -56,11 +56,7 @@ const WEEK_THEMES: Record<number, { title: string; subtitle: string; bullets: st
 };
 
 export default async function WelcomePage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"].includes(user.email ?? "")) {
-    redirect("/login");
-  }
+  await requireAdminPage();
 
   const admin = createAdminClient();
   const [{ data: profile }, { data: programme }] = await Promise.all([

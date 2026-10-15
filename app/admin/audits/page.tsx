@@ -1,11 +1,9 @@
-import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { createAdminClient } from "@/lib/supabase/server";
+import { requireAdminPage } from "@/lib/admin/auth";
 import Link from "next/link";
 import AuditCard from "@/components/admin/AuditCard";
 
 export const dynamic = "force-dynamic";
-
-const ADMIN_EMAILS = ["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"];
 
 const S = { bg: "#0E1014", surface: "#171B21", border: "#252A32", bronze: "#C8965A", text: "#F2F1ED", sub: "#9BA3AF", muted: "#3D434D", green: "#34D399" };
 
@@ -19,9 +17,7 @@ interface AuditRow {
 }
 
 export default async function AuditInboxPage() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !ADMIN_EMAILS.includes(user.email ?? "")) redirect("/login");
+  await requireAdminPage();
 
   const admin = createAdminClient();
 

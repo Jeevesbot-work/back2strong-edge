@@ -1,29 +1,23 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { cookies } from "next/headers";
+import { resolveActingClient } from "@/lib/acting-client";
 import type { ClientProgramme, Programme, ProgrammeWeek } from "@/types";
-
-const ADMIN_EMAILS = ["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"];
 
 /**
  * Load the signed-in client's bespoke programme document from the database.
  * If an admin has set a preview_user_id cookie, load that user's programme instead.
  * Returns null when the client has no programme assigned yet.
+ * The preview cookie is ignored unless the viewer is an admin.
  */
 export async function getClientProgramme(userId: string): Promise<ClientProgramme | null> {
-  const cookieStore = cookies();
-  const previewId = cookieStore.get("preview_user_id")?.value;
-
-  // Admin preview mode — load another client's programme
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const isAdmin = ADMIN_EMAILS.includes(user?.email ?? "");
-  const effectiveId = (isAdmin && previewId) ? previewId : userId;
-
-  const client = (isAdmin && previewId) ? createAdminClient() : createClient();
+  const sessionId = user?.id ?? userId;
+  const { targetId, previewing } = await resolveActingClient(sessionId, user?.email);
+  const client = previewing ? createAdminClient() : supabase;
   const { data } = await client
     .from("client_programmes")
     .select("programme, sessions")
-    .eq("user_id", effectiveId)
+    .eq("user_id", targetId)
     .maybeSingle();
 
   if (!data?.programme) return null;
