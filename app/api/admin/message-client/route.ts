@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { isAuthorisedAdmin } from "@/lib/admin/auth";
+import { coachMessagePush, sendPushToUser } from "@/lib/push-server";
 
 const ADMIN_EMAILS = ["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"];
 
@@ -25,5 +26,12 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, id: data.id });
+
+  let notified = 0;
+  try {
+    notified = await sendPushToUser(userId, coachMessagePush(content));
+  } catch (err) {
+    console.error("[message-client] push failed:", err);
+  }
+  return NextResponse.json({ ok: true, id: data.id, notified });
 }

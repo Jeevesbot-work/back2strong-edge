@@ -36,13 +36,13 @@ export default function MessageClientBox({ userId, clientName }: { userId: strin
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
-        placeholder={`Message ${clientName.split(" ")[0]} — lands in their Edge chat next time they open the app`}
+        placeholder={`Message ${clientName.split(" ")[0]} — lands in their Edge chat and pings their phone`}
         rows={3}
         className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white text-sm font-body placeholder:text-white/30 focus:outline-none focus:border-edge-gold/50 resize-none"
       />
       <div className="flex items-center justify-between mt-2">
         <p className="text-edge-muted text-xs">
-          {sent ? <span className="text-green-400">Sent — visible on their next app open</span> : error ? <span className="text-red-400">{error}</span> : "No push notification — they see it in-app"}
+          {sent ? <span className="text-green-400">Sent — they get a phone notification if alerts are on</span> : error ? <span className="text-red-400">{error}</span> : "Sends a phone notification if they have alerts switched on"}
         </p>
         <button
           onClick={send}
