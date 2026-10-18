@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireActiveClient } from "@/lib/ai/access";
 import { enforceDailyCap } from "@/lib/ai/quota";
+import { inspectMealPhoto } from "@/lib/nutrition/inspect-photo";
+import {
+  BLANK_PHOTO_MESSAGE,
+  NO_FOOD_MESSAGE,
+  isUnreadablePhoto,
+  mealFromAnalysis,
+  parseModelJson,
+} from "@/lib/nutrition/photo-frame";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -14,20 +22,46 @@ const JSON_SCHEMA = `{
   "edge_comment": "1-2 sentences in the voice of Edge — direct, warm British male coach. No emojis. No hype. Acknowledge the food choice honestly and connect it to protein-first fuelling."
 }`;
 
+const PHOTO_PROMPT = `You are a nutrition analyst for a men's fitness coaching app. Analyse this food photo and respond ONLY with a JSON object — no other text, no markdown, no code fences.
+
+Look carefully before naming anything. Check each item's specific colour, shape, size, skin/peel texture, and any visible cut surface or stem — these are the details that distinguish similar-looking foods (e.g. an apple has a stem indent and waxy skin, a plum is smaller with a smoother rounder shape and a crease line; a nectarine is fuzzless where a peach is fuzzy). If two foods on the plate could be confused, name the one that best matches everything you can see, not just the general shape and colour.
+
+If the image is blank, black, too dark to make anything out, or shows no food, drink, or supplement, do not guess and do not invent calories. Respond with exactly {"no_food": true} and nothing else.
+
+When you can see a food, drink, or supplement — including zero-calorie items such as black coffee, water, creatine, or diet soda — estimate that item. Calories may be 0. Respond with a JSON object that has exactly these fields:
+${JSON_SCHEMA}
+
+Be realistic with estimates. Always return valid JSON.`;
+
 export async function POST(req: NextRequest) {
   try {
     const access = await requireActiveClient();
     if (!access.ok) return access.response;
     const { supabase, userId, isAdmin } = access;
 
+    const { image, mimeType, text } = await req.json();
+
+    if (!image && !text) return NextResponse.json({ error: "No image or description provided" }, { status: 400 });
+
+    // A black frame is not an analysis. Reject it before the daily cap and before
+    // the model, so nothing is saved and the guess never happens.
+    if (!text) {
+      if (typeof image !== "string" || !image.trim()) {
+        return NextResponse.json({ error: "No image or description provided" }, { status: 400 });
+      }
+      const verdict = await inspectMealPhoto(image);
+      if (verdict === "blank") {
+        return NextResponse.json({ error: BLANK_PHOTO_MESSAGE }, { status: 422 });
+      }
+      if (verdict === "unreadable") {
+        return NextResponse.json({ error: "Couldn't read that photo. Try again." }, { status: 422 });
+      }
+    }
+
     if (!process.env.ANTHROPIC_API_KEY) {
       console.error("[nutrition] ANTHROPIC_API_KEY not set");
       return NextResponse.json({ error: "AI not configured" }, { status: 500 });
     }
-
-    const { image, mimeType, text } = await req.json();
-
-    if (!image && !text) return NextResponse.json({ error: "No image or description provided" }, { status: 400 });
 
     if (!isAdmin) {
       const limited = await enforceDailyCap(supabase, userId, "food");
@@ -70,14 +104,7 @@ Be realistic with estimates based on typical portion sizes. Always return valid 
             },
             {
               type: "text",
-              text: `You are a nutrition analyst for a men's fitness coaching app. Analyse this food photo and respond ONLY with a JSON object — no other text, no markdown, no code fences.
-
-Look carefully before naming anything. Check each item's specific colour, shape, size, skin/peel texture, and any visible cut surface or stem — these are the details that distinguish similar-looking foods (e.g. an apple has a stem indent and waxy skin, a plum is smaller with a smoother rounder shape and a crease line; a nectarine is fuzzless where a peach is fuzzy). If two foods on the plate could be confused, name the one that best matches everything you can see, not just the general shape and colour.
-
-The JSON must have exactly these fields:
-${JSON_SCHEMA}
-
-Be realistic with estimates. If you cannot identify food clearly, give your best guess. Always return valid JSON.`,
+              text: PHOTO_PROMPT,
             },
           ],
         }],
@@ -85,19 +112,20 @@ Be realistic with estimates. If you cannot identify food clearly, give your best
       raw = response.content[0].type === "text" ? response.content[0].text : "";
     }
 
-    let analysis: {
-      meal_name: string;
-      calories: number;
-      protein_g: number;
-      carbs_g: number;
-      fat_g: number;
-      edge_comment: string;
-    };
-
+    let parsed: unknown;
     try {
-      analysis = JSON.parse(raw);
+      parsed = parseModelJson(raw);
     } catch {
       console.error("[nutrition] Failed to parse Claude response:", raw);
+      return NextResponse.json({ error: "Could not analyse the meal" }, { status: 422 });
+    }
+
+    if (!text && isUnreadablePhoto(parsed)) {
+      return NextResponse.json({ error: NO_FOOD_MESSAGE }, { status: 422 });
+    }
+
+    const meal = mealFromAnalysis(parsed);
+    if (!meal) {
       return NextResponse.json({ error: "Could not analyse the meal" }, { status: 422 });
     }
 
@@ -105,12 +133,12 @@ Be realistic with estimates. If you cannot identify food clearly, give your best
       .from("nutrition_logs")
       .insert({
         user_id: userId,
-        meal_name: analysis.meal_name,
-        calories: Math.round(analysis.calories),
-        protein_g: analysis.protein_g,
-        carbs_g: analysis.carbs_g,
-        fat_g: analysis.fat_g,
-        edge_comment: analysis.edge_comment,
+        meal_name: meal.meal_name,
+        calories: meal.calories,
+        protein_g: meal.protein_g,
+        carbs_g: meal.carbs_g,
+        fat_g: meal.fat_g,
+        edge_comment: meal.edge_comment,
       })
       .select()
       .single();

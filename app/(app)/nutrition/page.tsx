@@ -27,6 +27,8 @@ import {
 import { computeFuelAdjustment, type FuelAdjustment, type FuelGoal } from "@/lib/fuel-adaptive";
 import { rankRecipesForRemaining } from "@/lib/recipe-suggestions";
 import { buildShoppingList, type ShoppingListItem } from "@/lib/shopping-list";
+import { prepareMealPhoto } from "@/lib/nutrition/meal-photo";
+import { BLANK_PHOTO_MESSAGE, BlankPhotoError } from "@/lib/nutrition/photo-frame";
 
 // Recipe library palette — branded, typographic, image-free (per Fuel design brief).
 const RECIPE_INK = "#12151C"; // card surface
@@ -355,19 +357,28 @@ export default function NutritionPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(""); setLatest(null);
-    const reader = new FileReader();
-    reader.onload = () => { const dataUrl = reader.result as string; setPreview(dataUrl); analyseImage(dataUrl); };
-    reader.readAsDataURL(file);
+    analyseImage(file);
   }
 
-  async function analyseImage(dataUrl: string) {
+  async function analyseImage(file: File) {
     setAnalysing(true);
     try {
-      const base64 = await resizeImage(dataUrl, 1568);
-      // resizeImage always re-encodes via canvas.toDataURL("image/jpeg", ...), so the
-      // outgoing bytes are JPEG regardless of the source file's original type.
+      let base64: string;
+      try {
+        base64 = await prepareMealPhoto(file, 1568);
+      } catch (err) {
+        // A black frame never reaches the model. The daily cap is not spent either,
+        // because this returns before the request.
+        setError(err instanceof BlankPhotoError
+          ? BLANK_PHOTO_MESSAGE
+          : "Couldn't read that photo. Try again, or use barcode or Describe.");
+        return;
+      }
+      setPreview(`data:image/jpeg;base64,${base64}`);
+      // prepareMealPhoto always re-encodes via canvas, so the outgoing bytes are JPEG
+      // regardless of the source file's original type.
       const res = await fetch("/api/nutrition/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: base64, mimeType: "image/jpeg" }) });
-      if (!res.ok) { const err = await res.json(); setError(err.error || "Analysis failed. Try a clearer photo."); return; }
+      if (!res.ok) { const err = await res.json().catch(() => ({})); setError(err.error || "Analysis failed. Try a clearer photo."); return; }
       const log: NutritionLog = await res.json();
       setLatest(log); setLogs((prev) => [log, ...prev]);
     } catch { setError("Something went wrong. Check your connection and try again."); }
@@ -1343,19 +1354,3 @@ function MacroCell({ label, value, unit, highlight }: { label: string; value: nu
   );
 }
 
-async function resizeImage(dataUrl: string, maxPx: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.82).split(",")[1]);
-    };
-    img.onerror = () => reject(new Error("Could not read that image."));
-    img.src = dataUrl;
-  });
-}
