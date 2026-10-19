@@ -12,7 +12,8 @@
     "test:recipes": "tsx --test lib/recipe-import/import.test.ts",
     "test:coach": "tsx --test lib/coach/message.test.ts",
     "test:security": "tsx --test lib/security/access.test.ts lib/admin/gate.test.ts",
-    "test:nutrition": "tsx --test lib/nutrition/photo-frame.test.ts"
+    "test:nutrition": "tsx --test lib/nutrition/photo-frame.test.ts",
+    "test:week": "tsx --test lib/training/week.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
