@@ -213,6 +213,8 @@ export default function SessionPage() {
   const [elapsed, setElapsed] = useState(0);
   const [rest, setRest] = useState<{ left: number; total: number; next: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const savingRef = useRef(false);
   const startedAt = useRef<number>(0);
 
   // Last time's numbers for every exercise in the session.
@@ -294,26 +296,40 @@ export default function SessionPage() {
   }
 
   async function finish() {
-    if (!session || saving) return;
+    if (!session || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
+    setSaveError("");
     markSessionDone(sessionType);
-    const sb = createClient();
-    const { data: { user } } = await sb.auth.getUser();
-    if (user) {
-      const { data: sd } = await sb.from("training_sessions").insert({
-        user_id: user.id, session_type: sessionType, completed_at: new Date().toISOString(),
-        duration_minutes: Math.max(1, Math.round(elapsed / 60)),
-      }).select().single();
-      if (sd) {
-        const rows = active.flatMap((i) => (logs[i] ?? []).filter((s) => s.done).map((s, j) => ({
-          session_id: sd.id, user_id: user.id, exercise_name: session.exercises[i].name,
-          sets_completed: j + 1, reps: s.reps, weight_kg: s.weight, struggled: false,
-        })));
-        if (rows.length) await sb.from("exercise_logs").insert(rows);
+    const exercises = active.flatMap((i) => (logs[i] ?? []).filter((s) => s.done).map((s, j) => ({
+      exercise_name: session.exercises[i].name,
+      sets_completed: j + 1,
+      reps: s.reps,
+      weight_kg: s.weight,
+    })));
+    try {
+      const res = await fetch("/api/train/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_type: sessionType,
+          duration_minutes: Math.max(1, Math.round(elapsed / 60)),
+          exercises,
+        }),
+      });
+      // 409 means the first tap already saved this session.
+      if (res.ok || res.status === 409) {
+        setPhase("done");
+        return;
       }
+      const data = await res.json().catch(() => ({}));
+      setSaveError(data.error || "Couldn't save that session. Try again.");
+    } catch {
+      setSaveError("Couldn't save that session. Check your connection and try again.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
-    setSaving(false);
-    setPhase("done");
   }
 
   // ── States ────────────────────────────────────────────────────────────────
@@ -557,6 +573,7 @@ export default function SessionPage() {
 
       {/* Footer */}
       <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, padding: "14px 16px calc(env(safe-area-inset-bottom, 0px) + 16px)", background: `linear-gradient(to top, ${C.bg} 65%, transparent)` }}>
+        {saveError && <p style={{ fontFamily: inter, fontSize: 13, color: "#F87171", textAlign: "center", margin: "0 auto 8px", maxWidth: 488 }}>{saveError}</p>}
         <div style={{ display: "flex", gap: 10, maxWidth: 488, margin: "0 auto" }}>
           {stepIdx > 0 && (
             <button onClick={() => { setStepIdx((s) => s - 1); window.scrollTo({ top: 0 }); }} aria-label="Previous block"
@@ -564,9 +581,10 @@ export default function SessionPage() {
           )}
           <button
             onClick={() => { if (isLast) finish(); else { setStepIdx((s) => s + 1); window.scrollTo({ top: 0 }); } }}
+            disabled={isLast && saving}
             style={{ flex: 1, background: isLast ? C.green : stepDone ? C.bronze : C.panelHi, color: isLast || stepDone ? C.bg : C.text,
               fontFamily: cond, fontWeight: 700, fontSize: 20, letterSpacing: "0.12em", textTransform: "uppercase", padding: "17px 0", borderRadius: 16,
-              border: `1px solid ${isLast || stepDone ? "transparent" : C.line}`, cursor: "pointer" }}>
+              border: `1px solid ${isLast || stepDone ? "transparent" : C.line}`, cursor: "pointer", opacity: isLast && saving ? 0.7 : 1 }}>
             {isLast ? (saving ? "Saving…" : "Finish session") : stepDone ? "Next" : "Skip to next"}
           </button>
         </div>

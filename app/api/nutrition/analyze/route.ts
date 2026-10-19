@@ -10,6 +10,7 @@ import {
   mealFromAnalysis,
   parseModelJson,
 } from "@/lib/nutrition/photo-frame";
+import { ALREADY_LOGGED, foodIsDuplicate, recentFoodLogs } from "@/lib/logs/duplicate";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -127,6 +128,12 @@ Be realistic with estimates based on typical portion sizes. Always return valid 
     const meal = mealFromAnalysis(parsed);
     if (!meal) {
       return NextResponse.json({ error: "Could not analyse the meal" }, { status: 422 });
+    }
+
+    const now = new Date();
+    const recent = await recentFoodLogs(supabase, userId, now);
+    if (foodIsDuplicate(recent, meal, now)) {
+      return NextResponse.json({ error: ALREADY_LOGGED }, { status: 409 });
     }
 
     const { data: log, error } = await supabase

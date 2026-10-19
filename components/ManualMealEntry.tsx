@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useRef, useState } from "react";
 
 type Log = {
   id: string; meal_name: string; calories: number; protein_g: number;
@@ -20,6 +19,7 @@ export default function ManualMealEntry({ onLogged }: { onLogged: (log: Log) => 
   const [tab, setTab] = useState<"describe" | "macros">("describe");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const busyRef = useRef(false);
 
   // describe
   const [desc, setDesc] = useState("");
@@ -35,7 +35,8 @@ export default function ManualMealEntry({ onLogged }: { onLogged: (log: Log) => 
   }
 
   async function submitDescribe() {
-    if (!desc.trim()) return;
+    if (busyRef.current || !desc.trim()) return;
+    busyRef.current = true;
     setBusy(true); setError("");
     try {
       const res = await fetch("/api/nutrition/analyze", {
@@ -49,32 +50,35 @@ export default function ManualMealEntry({ onLogged }: { onLogged: (log: Log) => 
       reset(); setOpen(false);
     } catch {
       setError("Something went wrong. Check your connection.");
-    } finally { setBusy(false); }
+    } finally { busyRef.current = false; setBusy(false); }
   }
 
   async function submitMacros() {
     const calories = Math.round(Number(cal));
     const protein_g = Math.round(Number(pro) * 10) / 10;
+    if (busyRef.current) return;
     if (!name.trim() || !calories || calories <= 0) { setError("Give it a name and calories at least."); return; }
+    busyRef.current = true;
     setBusy(true); setError("");
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setError("Session expired — reopen the app."); return; }
       const carbs_g = carb ? Math.round(Number(carb) * 10) / 10 : 0;
       const fat_g = fat ? Math.round(Number(fat) * 10) / 10 : 0;
       const edge_comment =
         protein_g >= 30 ? "Big protein hit — that's the good stuff."
         : protein_g >= 15 ? "Solid protein. Keep them stacking up."
         : "Logged. Aim to get some protein alongside it next time.";
-      const { data: log, error: insErr } = await supabase
-        .from("nutrition_logs")
-        .insert({ user_id: user.id, meal_name: name.trim(), calories, protein_g, carbs_g, fat_g, edge_comment })
-        .select().single();
-      if (insErr || !log) { setError("Couldn't save that. Try again."); return; }
+      const res = await fetch("/api/nutrition/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meal_name: name.trim(), calories, protein_g, carbs_g, fat_g, edge_comment }),
+      });
+      const log = await res.json().catch(() => ({}));
+      if (!res.ok || !log?.id) { setError(log.error || "Couldn't save that. Try again."); return; }
       onLogged(log as Log);
       reset(); setOpen(false);
-    } finally { setBusy(false); }
+    } catch {
+      setError("Something went wrong. Check your connection.");
+    } finally { busyRef.current = false; setBusy(false); }
   }
 
   const inputStyle: React.CSSProperties = {

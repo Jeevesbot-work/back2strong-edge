@@ -32,6 +32,7 @@ export default function TellEdge({ onLogged }: { onLogged: (logs: Log[]) => void
   const [canListen, setCanListen] = useState(false);
   const recRef = useRef<SpeechRec | null>(null);
   const baseRef = useRef("");
+  const busyRef = useRef(false);
 
   useEffect(() => {
     const w = window as unknown as { SpeechRecognition?: new () => SpeechRec; webkitSpeechRecognition?: new () => SpeechRec };
@@ -59,7 +60,8 @@ export default function TellEdge({ onLogged }: { onLogged: (logs: Log[]) => void
   }
 
   async function parse(withAnswer?: string) {
-    if (!text.trim()) return;
+    if (busyRef.current || !text.trim()) return;
+    busyRef.current = true;
     recRef.current?.stop();
     setStage("thinking"); setError(""); setDone("");
     try {
@@ -72,9 +74,12 @@ export default function TellEdge({ onLogged }: { onLogged: (logs: Log[]) => void
       if (d.question) { setQuestion(d.question); setAnswer(""); setStage("question"); return; }
       setItems(d.items ?? []); setComment(d.edge_comment ?? ""); setStage("review");
     } catch { setError("No connection. Try again."); setStage("idle"); }
+    finally { busyRef.current = false; }
   }
 
   async function save() {
+    if (busyRef.current || !items.length) return;
+    busyRef.current = true;
     setStage("saving"); setError("");
     try {
       const res = await fetch("/api/nutrition/describe", {
@@ -84,9 +89,11 @@ export default function TellEdge({ onLogged }: { onLogged: (logs: Log[]) => void
       const d = await res.json();
       if (!res.ok) { setError(d.error ?? "Couldn't save."); setStage("review"); return; }
       onLogged(d.logs ?? []);
-      setDone(`Logged ${items.length} item${items.length === 1 ? "" : "s"}.`);
+      const n = (d.logs ?? items).length;
+      setDone(`Logged ${n} item${n === 1 ? "" : "s"}.`);
       setText(""); setItems([]); setStage("idle");
     } catch { setError("No connection. Try again."); setStage("review"); }
+    finally { busyRef.current = false; }
   }
 
   const total = items.reduce((a, i) => ({ c: a.c + i.calories, p: a.p + i.protein_g }), { c: 0, p: 0 });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { ALREADY_LOGGED, recentWalks, walkIsDuplicate } from "@/lib/logs/duplicate";
 
 // Log a walk for the signed-in client. Kept dead simple: minutes + today's
 // date. RLS ensures a client can only ever write their own rows.
@@ -20,7 +21,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Minutes must be between 1 and 600" }, { status: 400 });
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+  const recent = await recentWalks(supabase, user.id, now);
+  if (walkIsDuplicate(recent, minutes, now)) {
+    return NextResponse.json({ error: ALREADY_LOGGED }, { status: 409 });
+  }
+
   const { error } = await supabase
     .from("walk_logs")
     .insert({ user_id: user.id, date: today, minutes });

@@ -114,6 +114,11 @@ export default function NutritionPage() {
   const [preview, setPreview] = useState<string | null>(null);
   const [latest, setLatest] = useState<NutritionLog | null>(null);
   const [error, setError] = useState("");
+  const [loggingRecipe, setLoggingRecipe] = useState(false);
+  const [loggingScan, setLoggingScan] = useState(false);
+  const [recipeLogError, setRecipeLogError] = useState("");
+  const loggingRef = useRef(false);
+  const analysingRef = useRef(false);
   const [openRecipe, setOpenRecipe] = useState<LiveRecipe | null>(null);
 
   // Live recipe library (Supabase). Lazily loaded the first time the tab opens.
@@ -318,28 +323,39 @@ export default function NutritionPage() {
   }
 
   async function logRecipe(recipe: LiveRecipe) {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setError("Session expired — reopen the app and try again."); return; }
-    const protein_g = recipe.protein_g ?? 0;
-    const { data: log, error: insErr } = await supabase
-      .from("nutrition_logs")
-      .insert({
-        user_id: user.id,
-        meal_name: recipe.title,
-        calories: recipe.calories ?? 0,
-        protein_g,
-        carbs_g: recipe.carbs_g ?? 0,
-        fat_g: recipe.fat_g ?? 0,
-        edge_comment: proteinComment(protein_g),
-      })
-      .select()
-      .single();
-    if (insErr || !log) { setError("Couldn't log that meal. Try again."); return; }
-    setLogs((prev) => [log, ...prev]);
-    setLatest(log);
-    setOpenRecipe(null);
-    setTab("today");
+    if (loggingRef.current) return;
+    loggingRef.current = true;
+    setLoggingRecipe(true);
+    setRecipeLogError("");
+    try {
+      const protein_g = recipe.protein_g ?? 0;
+      const res = await fetch("/api/nutrition/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          meal_name: recipe.title,
+          calories: recipe.calories ?? 0,
+          protein_g,
+          carbs_g: recipe.carbs_g ?? 0,
+          fat_g: recipe.fat_g ?? 0,
+          edge_comment: proteinComment(protein_g),
+        }),
+      });
+      const log = await res.json().catch(() => ({}));
+      if (!res.ok || !log?.id) {
+        setRecipeLogError(log.error || "Couldn't log that meal. Try again.");
+        return;
+      }
+      setLogs((prev) => [log, ...prev]);
+      setLatest(log);
+      setOpenRecipe(null);
+      setTab("today");
+    } catch {
+      setRecipeLogError("Couldn't log that meal. Check your connection and try again.");
+    } finally {
+      loggingRef.current = false;
+      setLoggingRecipe(false);
+    }
   }
 
   async function loadTodaysLogs() {
@@ -361,6 +377,8 @@ export default function NutritionPage() {
   }
 
   async function analyseImage(file: File) {
+    if (analysingRef.current) return;
+    analysingRef.current = true;
     setAnalysing(true);
     try {
       let base64: string;
@@ -382,7 +400,7 @@ export default function NutritionPage() {
       const log: NutritionLog = await res.json();
       setLatest(log); setLogs((prev) => [log, ...prev]);
     } catch { setError("Something went wrong. Check your connection and try again."); }
-    finally { setAnalysing(false); setPreview(null); if (fileRef.current) fileRef.current.value = ""; }
+    finally { analysingRef.current = false; setAnalysing(false); setPreview(null); if (fileRef.current) fileRef.current.value = ""; }
   }
 
   async function deleteLog(id: string) {
@@ -417,30 +435,40 @@ export default function NutritionPage() {
   }, []);
 
   async function logScanned() {
-    if (!scanned) return;
+    if (loggingRef.current || !scanned) return;
+    loggingRef.current = true;
+    setLoggingScan(true);
+    setError("");
     const factor = scanGrams / 100;
     const b = scanned.per_100g;
     const calories = Math.round(b.calories * factor);
     const protein_g = Math.round(b.protein_g * factor * 10) / 10;
     const carbs_g = Math.round(b.carbs_g * factor * 10) / 10;
     const fat_g = Math.round(b.fat_g * factor * 10) / 10;
-
-    const edge_comment = proteinComment(protein_g);
-
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setError("Session expired — reopen the app and try again."); return; }
-
-    const { data: log, error: insErr } = await supabase
-      .from("nutrition_logs")
-      .insert({ user_id: user.id, meal_name: scanned.product_name, calories, protein_g, carbs_g, fat_g, edge_comment })
-      .select()
-      .single();
-
-    if (insErr || !log) { setError("Couldn't save that log. Try again."); return; }
-    setLogs((prev) => [log, ...prev]);
-    setLatest(log);
-    setScanned(null);
+    try {
+      const res = await fetch("/api/nutrition/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          meal_name: scanned.product_name,
+          calories,
+          protein_g,
+          carbs_g,
+          fat_g,
+          edge_comment: proteinComment(protein_g),
+        }),
+      });
+      const log = await res.json().catch(() => ({}));
+      if (!res.ok || !log?.id) { setError(log.error || "Couldn't save that log. Try again."); return; }
+      setLogs((prev) => [log, ...prev]);
+      setLatest(log);
+      setScanned(null);
+    } catch {
+      setError("Couldn't save that log. Check your connection and try again.");
+    } finally {
+      loggingRef.current = false;
+      setLoggingScan(false);
+    }
   }
 
   // Live preview of macros for the chosen portion, before logging.
@@ -475,6 +503,8 @@ export default function NutritionPage() {
         isHero={heroMealIds.has(openRecipe.id)}
         onToggleHero={() => toggleHero(openRecipe.id)}
         onLog={() => logRecipe(openRecipe)}
+        logging={loggingRecipe}
+        logError={recipeLogError}
         onBack={() => setOpenRecipe(null)}
       />
     );
@@ -570,7 +600,7 @@ export default function NutritionPage() {
                   <MacroCell label="Fat" value={previewMacros.fat_g} unit="g" />
                 </div>
 
-                <button onClick={logScanned} className="pressable w-full bg-edge-bronze rounded-xl py-3 font-condensed font-bold text-sm uppercase tracking-widest text-white transition-transform">Log It</button>
+                <button onClick={logScanned} disabled={loggingScan} className="pressable w-full bg-edge-bronze rounded-xl py-3 font-condensed font-bold text-sm uppercase tracking-widest text-white transition-transform disabled:opacity-60">{loggingScan ? "Logging…" : "Log It"}</button>
               </div>
             </div>
           )}
@@ -951,12 +981,16 @@ function RecipeDetail({
   isHero,
   onToggleHero,
   onLog,
+  logging,
+  logError,
   onBack,
 }: {
   recipe: LiveRecipe;
   isHero: boolean;
   onToggleHero: () => void;
   onLog: () => void;
+  logging?: boolean;
+  logError?: string;
   onBack: () => void;
 }) {
   const time = totalTimeMins(recipe);
@@ -1048,12 +1082,14 @@ function RecipeDetail({
       )}
 
       <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto px-4 pb-6 pt-4" style={{ background: "linear-gradient(to top, #0E1014 60%, transparent)" }}>
+        {logError && <p className="text-edge-red text-sm text-center mb-2">{logError}</p>}
         <button
           onClick={onLog}
-          className="pressable w-full rounded-2xl py-4 text-center font-condensed font-bold text-sm uppercase tracking-[0.15em]"
+          disabled={logging}
+          className="pressable w-full rounded-2xl py-4 text-center font-condensed font-bold text-sm uppercase tracking-[0.15em] disabled:opacity-60"
           style={{ backgroundColor: RECIPE_BRASS, color: RECIPE_INK }}
         >
-          Log This
+          {logging ? "Logging…" : "Log This"}
         </button>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireActiveClient } from "@/lib/ai/access";
 import { enforceDailyCap } from "@/lib/ai/quota";
+import { ALREADY_LOGGED, foodIsDuplicate, recentFoodLogs } from "@/lib/logs/duplicate";
 
 // "Tell Edge what you ate" — spoken or typed food logging.
 //
@@ -51,7 +52,11 @@ export async function POST(req: NextRequest) {
         fat_g: Math.max(0, Math.round(num(i.fat_g) * 10) / 10),
         edge_comment: String(i.edge_comment ?? "").slice(0, 400),
       }));
-      const { data, error } = await supabase.from("nutrition_logs").insert(rows).select();
+      const now = new Date();
+      const recent = await recentFoodLogs(supabase, userId, now);
+      const fresh = rows.filter((row) => !foodIsDuplicate(recent, row, now));
+      if (!fresh.length) return NextResponse.json({ error: ALREADY_LOGGED }, { status: 409 });
+      const { data, error } = await supabase.from("nutrition_logs").insert(fresh).select();
       if (error) return NextResponse.json({ error: "Failed to save" }, { status: 500 });
       return NextResponse.json({ logs: data });
     }
