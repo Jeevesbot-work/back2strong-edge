@@ -1,4 +1,5 @@
 import { Profile, CheckIn, ProgrammeState, TrainingSession, LessonCompletion, AdminNote } from "@/types";
+import { countCompletedSessionsThisWeek, latestCompletedAt } from "@/lib/training/week";
 
 interface UserContext {
   profile: Profile;
@@ -18,7 +19,7 @@ interface UserContext {
   plannedMeals?: string[];
 }
 
-export function buildSystemPrompt(ctx: UserContext): string {
+export function buildSystemPrompt(ctx: UserContext, now = new Date()): string {
   const { profile, programme, recentCheckIns, recentSessions, lessonProgress, adminNotes, messageCount } = ctx;
 
   const avgEnergy = recentCheckIns.length
@@ -31,13 +32,7 @@ export function buildSystemPrompt(ctx: UserContext): string {
     ? (recentCheckIns.reduce((s, c) => s + c.stress_level, 0) / recentCheckIns.length).toFixed(1)
     : "N/A";
 
-  const sessionsThisWeek = recentSessions.filter((s) => {
-    if (!s.completed_at) return false;
-    const d = new Date(s.completed_at);
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    return d > weekAgo;
-  }).length;
+  const sessionsThisWeek = countCompletedSessionsThisWeek(recentSessions, now);
 
   const currentDay = programme?.current_day ?? 1;
   const currentWeek = programme?.current_week ?? 1;
@@ -152,7 +147,8 @@ Age: ${profile.age || "unknown"}
 Goal: ${profile.goal || "rebuild strength and identity"}
 Injuries/limitations: ${profile.injuries || "none flagged"}
 Programme: Week ${currentWeek}, Day ${currentDay}
-Sessions completed this week: ${sessionsThisWeek} of 3
+Completed sessions this week: ${sessionsThisWeek}
+"This week" is Monday to Sunday, London time. ${sessionsThisWeek} is how many sessions he has actually finished. The programme target is separate — never tell him he has done three sessions unless the completed count above is 3.
 Average energy (last 7 days): ${avgEnergy}/5
 Average sleep quality (last 7 days): ${avgSleep}/5
 Average stress level (last 7 days): ${avgStress}/5
@@ -160,24 +156,15 @@ STRONG System lessons completed: ${lessonsCompleted}
 ${fuelContext}${walkContext}${planContext}${adminContext}${upgradePrompt}`;
 }
 
-export function buildDailyMessage(ctx: UserContext): string {
+export function buildDailyMessage(ctx: UserContext, now = new Date()): string {
   const { profile, recentCheckIns, recentSessions, programme } = ctx;
 
   const lastCheckIn = recentCheckIns[0];
-  const sessionsThisWeek = recentSessions.filter((s) => {
-    if (!s.completed_at) return false;
-    const d = new Date(s.completed_at);
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    return d > weekAgo;
-  }).length;
-
-  const daysSinceLastSession = recentSessions.length
-    ? Math.floor(
-        (Date.now() - new Date(recentSessions[0].created_at).getTime()) /
-          (1000 * 60 * 60 * 24)
-      )
-    : 99;
+  const sessionsThisWeek = countCompletedSessionsThisWeek(recentSessions, now);
+  const latest = latestCompletedAt(recentSessions);
+  const daysSinceLastSession = latest == null
+    ? 99
+    : Math.floor((now.getTime() - latest) / (1000 * 60 * 60 * 24));
 
   const name = profile.full_name?.split(" ")[0] || "mate";
 
@@ -185,7 +172,7 @@ export function buildDailyMessage(ctx: UserContext): string {
 
 Context:
 - Week ${programme?.current_week ?? 1}, Day ${programme?.current_day ?? 1}
-- Sessions this week: ${sessionsThisWeek} of 3
+- Completed sessions this week (Monday–Sunday, London): ${sessionsThisWeek}. This is the count of finished workouts, not the weekly target.
 - Days since last session: ${daysSinceLastSession}
 - Yesterday's check-in energy: ${lastCheckIn?.morning_energy ?? "not done"}/5
 - Yesterday's sleep quality: ${lastCheckIn?.sleep_quality ?? "not done"}/5

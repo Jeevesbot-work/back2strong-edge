@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       supabase.from("profiles").select("*").eq("id", userId).single(),
       supabase.from("programme_state").select("*").eq("user_id", userId).single(),
       supabase.from("check_ins").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(7),
-      supabase.from("training_sessions").select("*").eq("user_id", userId).not("completed_at", "is", null).order("completed_at", { ascending: false }).limit(5),
+      supabase.from("training_sessions").select("*").eq("user_id", userId).not("completed_at", "is", null).order("completed_at", { ascending: false }).limit(20),
       supabase.from("lesson_completions").select("*").eq("user_id", userId),
       supabase.from("admin_notes").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
       supabase.from("messages").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(20),

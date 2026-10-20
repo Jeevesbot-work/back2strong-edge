@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 const B = "#C8965A";
 const SURFACE = "#171B21";
@@ -19,9 +19,13 @@ export default function WalkLogger({ initialMinutes = 0 }: { initialMinutes?: nu
   const [custom, setCustom] = useState(false);
   const [customVal, setCustomVal] = useState("");
   const [justAdded, setJustAdded] = useState(false);
+  // setState does not disable the button until the next paint, so a second tap
+  // in the same gesture would send a second request. The ref closes that gap.
+  const busyRef = useRef(false);
 
   async function log(minutes: number) {
-    if (!minutes || minutes <= 0) return;
+    if (busyRef.current || !minutes || minutes <= 0) return;
+    busyRef.current = true;
     setBusy(minutes);
     try {
       const res = await fetch("/api/walk", {
@@ -38,6 +42,7 @@ export default function WalkLogger({ initialMinutes = 0 }: { initialMinutes?: nu
         setCustomVal("");
       }
     } finally {
+      busyRef.current = false;
       setBusy(null);
     }
   }
