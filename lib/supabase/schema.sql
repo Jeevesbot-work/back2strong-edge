@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   protein_target INTEGER DEFAULT 160,
   calorie_target INTEGER DEFAULT 2200,
   approved BOOLEAN DEFAULT false,
+  is_test BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

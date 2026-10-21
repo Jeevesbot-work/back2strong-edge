@@ -8,6 +8,7 @@ import WalkLogger from "@/components/WalkLogger";
 import DayLoop, { type DayTask, type MorningReport } from "@/components/DayLoop";
 import { ukDate, reportTargetDate } from "@/lib/day-dates";
 import BlueprintCard from "@/components/blueprint/BlueprintCard";
+import AwaitingProgramme from "@/components/AwaitingProgramme";
 import { getScoreboard, resolveBlueprintUser } from "@/lib/blueprint";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -164,6 +165,10 @@ export default async function HomePage() {
   const coachNote = lastMessage?.[0]?.content ?? null;
   // "Week done" only applies when there are lifting targets this week and they're all met.
   const weekDone = activeBlockKeys.size > 0 && blockDoneThisWeek >= activeBlockKeys.size;
+
+  if (!prog) {
+    return <AwaitingProgramme firstName={firstName} greeting={getGreeting()} dateLine={getDateLine()} />;
+  }
 
   return (
     <div className="max-w-lg mx-auto bg-edge-bg min-h-screen">

@@ -10,6 +10,7 @@ import SetWeekButton from "./SetWeekButton";
 import MessageClientBox from "./MessageClientBox";
 import WeightTrendChart from "./WeightTrendChart";
 import FuelReportPanel from "./FuelReportPanel";
+import TestAccountToggle from "./TestAccountToggle";
 import { ReplyDraftList, UnansweredList, type OpenClientView, type ReplyDraftView } from "@/components/admin/ReplyDrafts";
 import { draftsTableMissing, openClientMessages, replyAgeLabel, type ThreadMessage } from "@/lib/coach/replies";
 
@@ -157,6 +158,8 @@ export default async function AdminUserPage({ params }: { params: { id: string }
         </div>
       </div>
 
+      <TestAccountToggle userId={userId} isTest={profile?.is_test === true} />
+
       {/* Profile summary */}
       <div className="bg-edge-surface rounded-xl p-4 border border-white/[0.08] mb-4">
         <div className="grid grid-cols-2 gap-3">
@@ -224,7 +227,7 @@ export default async function AdminUserPage({ params }: { params: { id: string }
               ) : (
                 <>
                   <p className="font-condensed font-bold text-sm text-edge-red uppercase tracking-wide">No Programme Loaded</p>
-                  <p className="text-edge-muted text-xs">Client sees &quot;awaiting programme&quot; state in the app</p>
+                  <p className="text-edge-muted text-xs">Client sees &quot;Your programme is being built by Nick.&quot; Nothing is loaded until you assign one.</p>
                 </>
               )}
             </div>
