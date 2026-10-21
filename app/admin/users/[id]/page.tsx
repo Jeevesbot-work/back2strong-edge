@@ -10,6 +10,8 @@ import SetWeekButton from "./SetWeekButton";
 import MessageClientBox from "./MessageClientBox";
 import WeightTrendChart from "./WeightTrendChart";
 import FuelReportPanel from "./FuelReportPanel";
+import { ReplyDraftList, UnansweredList, type OpenClientView, type ReplyDraftView } from "@/components/admin/ReplyDrafts";
+import { draftsTableMissing, openClientMessages, replyAgeLabel, type ThreadMessage } from "@/lib/coach/replies";
 
 export default async function AdminUserPage({ params }: { params: { id: string } }) {
   await requireAdminPage();
@@ -23,6 +25,7 @@ export default async function AdminUserPage({ params }: { params: { id: string }
     { data: clientProgramme },
     { data: checkIns },
     { data: messages },
+    draftResult,
     { data: adminNotes },
     { data: trainingSessions },
     { data: nutritionLogs },
@@ -32,7 +35,8 @@ export default async function AdminUserPage({ params }: { params: { id: string }
     admin.from("programme_state").select("*").eq("user_id", userId).single(),
     admin.from("client_programmes").select("programme->title, programme->subtitle, updated_at").eq("user_id", userId).maybeSingle(),
     admin.from("check_ins").select("*").eq("user_id", userId).order("date", { ascending: false }).limit(14),
-    admin.from("messages").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(20),
+    admin.from("messages").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(200),
+    admin.from("coach_reply_drafts").select("id, user_id, content, created_at, client_message_id").eq("user_id", userId).eq("status", "pending").order("created_at", { ascending: false }).limit(20),
     admin.from("admin_notes").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
     admin.from("training_sessions").select("*").eq("user_id", userId).order("completed_at", { ascending: false, nullsFirst: false }).limit(10),
     admin.from("nutrition_logs").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(10),
@@ -83,6 +87,38 @@ export default async function AdminUserPage({ params }: { params: { id: string }
     .filter((e) => !!e.time)
     .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
     .slice(0, 20);
+
+  const clientName = profile?.full_name?.split(" ")[0] || profile?.full_name || "Client";
+  const thread: ThreadMessage[] = (messages ?? []).flatMap((row) => {
+    if ((row.role !== "user" && row.role !== "assistant") || typeof row.content !== "string" || !row.created_at) return [];
+    return [{ id: row.id as string, userId, role: row.role as "user" | "assistant", content: row.content as string, createdAt: row.created_at as string }];
+  });
+  const textById = new Map(thread.map((row) => [row.id, row.content]));
+  const openMessages: OpenClientView[] = openClientMessages(thread, Date.now()).map((row) => ({
+    messageId: row.messageId,
+    userId: row.userId,
+    name: clientName,
+    content: row.content,
+    ageLabel: replyAgeLabel(row.ageMs),
+    overdue: row.overdue,
+    href: "#messages",
+  }));
+  const draftsNotice = draftsTableMissing(draftResult.error)
+    ? "Reply drafts are not in the database yet. Apply migration 0017_coach_reply_drafts.sql in the Supabase SQL editor."
+    : draftResult.error
+      ? "Couldn't load reply drafts."
+      : null;
+  const replyDrafts: ReplyDraftView[] = draftsNotice ? [] : (draftResult.data ?? []).flatMap((row) => {
+    if (!row.id || typeof row.content !== "string") return [];
+    return [{
+      id: row.id,
+      userId,
+      clientName,
+      clientMessage: row.client_message_id ? textById.get(row.client_message_id) ?? null : null,
+      content: row.content,
+      createdAt: row.created_at,
+    }];
+  });
 
   const eventColor = { checkin: "#34D399", training: "#60A5FA", meal: "#F5A623", walk: "#C8965A" } as const;
   const eventLabel = { checkin: "Check-in", training: "Training", meal: "Meal", walk: "Walk" } as const;
@@ -306,6 +342,19 @@ export default async function AdminUserPage({ params }: { params: { id: string }
         </div>
       </div>
 
+      {(draftsNotice || replyDrafts.length > 0 || openMessages.length > 0) && (
+        <div className="mb-4 space-y-3">
+          <h2 className="font-condensed font-bold text-xs uppercase tracking-widest text-edge-muted">
+            Coach replies
+          </h2>
+          {draftsNotice && (
+            <p className="text-sm font-body text-edge-gold bg-edge-gold/10 border border-edge-gold/30 rounded-xl p-3">{draftsNotice}</p>
+          )}
+          <UnansweredList items={openMessages} />
+          <ReplyDraftList drafts={replyDrafts} />
+        </div>
+      )}
+
       {/* Message client */}
       <div className="mb-4">
         <h2 className="font-condensed font-bold text-xs uppercase tracking-widest text-edge-muted mb-3">
@@ -315,7 +364,7 @@ export default async function AdminUserPage({ params }: { params: { id: string }
       </div>
 
       {/* Recent messages */}
-      <div className="mb-4">
+      <div id="messages" className="mb-4">
         <h2 className="font-condensed font-bold text-xs uppercase tracking-widest text-edge-muted mb-3">
           Recent Edge Conversations
         </h2>

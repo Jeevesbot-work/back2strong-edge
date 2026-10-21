@@ -4,9 +4,23 @@ import { buildSystemPrompt } from "@/lib/claude/prompts";
 import { weekStartOf, DAY_LABELS_LONG } from "@/lib/meal-plan";
 import { requireActiveClient } from "@/lib/ai/access";
 import { enforceDailyCap } from "@/lib/ai/quota";
-import { saveCompletedReply } from "@/lib/ai/persist-reply";
+import { ANSWER_LATEST_INSTRUCTION, messagesForModel, type ModelTurn } from "@/lib/coach/replies";
+import { createServiceClient } from "@/lib/supabase/service";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
+function modelHistory(rows: Array<{ role?: string; content?: string }> | null): ModelTurn[] {
+  const history: ModelTurn[] = [];
+  for (const row of rows ?? []) {
+    if ((row.role === "user" || row.role === "assistant") && typeof row.content === "string") {
+      history.push({ role: row.role, content: row.content });
+    }
+  }
+  return history;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,7 +55,7 @@ export async function POST(req: NextRequest) {
       supabase.from("training_sessions").select("*").eq("user_id", userId).not("completed_at", "is", null).order("completed_at", { ascending: false }).limit(20),
       supabase.from("lesson_completions").select("*").eq("user_id", userId),
       supabase.from("admin_notes").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
-      supabase.from("messages").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(20),
+      supabase.from("messages").select("role, content").eq("user_id", userId).order("created_at", { ascending: false }).limit(20),
       supabase.from("messages").select("*", { count: "exact", head: true }).eq("user_id", userId),
       supabase.from("nutrition_logs").select("date, protein_g, calories, meal_name").eq("user_id", userId).gte("date", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)).order("date", { ascending: true }),
       supabase.from("walk_logs").select("minutes").eq("user_id", userId).gte("date", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)),
@@ -65,76 +79,68 @@ export async function POST(req: NextRequest) {
         .filter((x): x is string => !!x),
     });
 
-    const history = (messageHistory ?? [])
-      .reverse()
-      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
-
     if (!isAdmin) {
       const limited = await enforceDailyCap(supabase, userId, "coach");
       if (limited) return limited;
     }
 
-    await supabase.from("messages").insert({ user_id: userId, role: "user", content: message });
+    const trimmed = message.trim();
+    const { data: savedUser, error: userError } = await supabase
+      .from("messages")
+      .insert({ user_id: userId, role: "user", content: trimmed })
+      .select("id")
+      .single();
+    if (userError || !savedUser) {
+      console.error("[edge] client message was not saved:", userError?.message ?? "no row");
+      return NextResponse.json({ error: "Couldn't save your message. Try again." }, { status: 500 });
+    }
 
-    const stream = await anthropic.messages.stream({
-      model: "claude-sonnet-4-6",
-      max_tokens: 300,
-      system: systemPrompt,
-      messages: [...history, { role: "user", content: message }],
-    });
+    // The reply is generated and stored before this function returns. The
+    // previous handler finished the HTTP response and only then tried to
+    // insert the assistant row, which let the serverless runtime freeze
+    // first. Insert errors were only logged. The draft is written with the
+    // service role, and the text is not sent back to the client.
+    const modelMessages = messagesForModel(modelHistory(messageHistory).reverse(), trimmed);
+    let replyText = "";
+    try {
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 300,
+        system: `${systemPrompt}\n\n${ANSWER_LATEST_INSTRUCTION}`,
+        messages: modelMessages,
+      });
+      replyText = response.content
+        .map((block) => (block.type === "text" ? block.text : ""))
+        .join("");
+    } catch (err) {
+      console.error("[edge] coach reply was not generated:", err instanceof Error ? err.message : err);
+      return NextResponse.json({ ok: true, id: savedUser.id, drafted: false });
+    }
 
-    let full = "";
-    const encoder = new TextEncoder();
+    const text = replyText.trim();
+    if (!text) {
+      console.error("[edge] assistant reply was empty; nothing saved");
+      return NextResponse.json({ ok: true, id: savedUser.id, drafted: false });
+    }
 
-    // Save the reply before closing the stream. Closing first lets the
-    // serverless runtime freeze the function before the insert finishes,
-    // which is how completed coach replies were being lost.
-    const readable = new ReadableStream({
-      async start(controller) {
-        let completed = false;
-        let clientGone = false;
-        try {
-          for await (const chunk of stream) {
-            if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-              full += chunk.delta.text;
-              if (!clientGone) {
-                try {
-                  controller.enqueue(encoder.encode(chunk.delta.text));
-                } catch (enqueueErr) {
-                  clientGone = true;
-                  console.error("[edge] client disconnected while streaming:", enqueueErr);
-                }
-              }
-            }
-          }
-          completed = true;
-        } catch (streamErr) {
-          console.error("[edge] Stream error:", streamErr);
-        } finally {
-          if (completed) {
-            await saveCompletedReply(full, async (text) => {
-              const { error } = await supabase.from("messages").insert({
-                user_id: userId,
-                role: "assistant",
-                content: text,
-              });
-              return error ? { message: error.message } : null;
-            });
-          } else {
-            console.error("[edge] assistant reply not saved; the model stream did not finish");
-          }
-          try {
-            controller.close();
-          } catch (closeErr) {
-            console.error("[edge] stream close failed:", closeErr);
-          }
-        }
-      },
-    });
+    const admin = createServiceClient();
+    const { data: draft, error: draftError } = await admin
+      .from("coach_reply_drafts")
+      .insert({
+        user_id: userId,
+        client_message_id: savedUser.id,
+        content: text,
+        status: "pending",
+      })
+      .select("id")
+      .single();
 
-    return new NextResponse(readable, {
-      headers: { "Content-Type": "text/plain; charset=utf-8", "Transfer-Encoding": "chunked" },
-    });
+    if (draftError || !draft) {
+      console.error("[edge] failed to save coach reply draft:", draftError?.message ?? "no row");
+      return NextResponse.json({ ok: true, id: savedUser.id, drafted: false });
+    }
+
+    return NextResponse.json({ ok: true, id: savedUser.id, drafted: true });
   } catch (err) {
     console.error("[edge] Unhandled error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

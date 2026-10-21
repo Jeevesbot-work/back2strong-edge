@@ -112,12 +112,14 @@ describe("security wiring", () => {
     assert.match(read("app/api/nutrition/describe/route.ts"), /enforceDailyCap\([\s\S]*"food"/);
   });
 
-  it("saves the coach reply before the stream closes, and the weekly review waits for it", () => {
+  it("saves the coach reply as a draft before responding, and the weekly review waits for it", () => {
     const edge = read("app/api/edge/route.ts");
-    const saveAt = edge.indexOf("saveCompletedReply");
-    const closeAt = edge.indexOf("controller.close");
-    assert.ok(saveAt > 0 && closeAt > saveAt);
-    assert.equal(edge.indexOf("controller.close", closeAt + 1), -1);
+    const draftAt = edge.indexOf('from("coach_reply_drafts")');
+    const okAt = edge.indexOf("drafted: true");
+    assert.ok(draftAt > 0 && okAt > draftAt);
+    assert.equal(edge.includes("ReadableStream"), false);
+    assert.equal(edge.includes("controller.close"), false);
+    assert.match(edge, /createServiceClient/);
 
     const review = read("app/weekly-review/page.tsx");
     const textAt = review.indexOf("await res.text()");
