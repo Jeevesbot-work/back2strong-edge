@@ -38,6 +38,9 @@ interface Props {
   replyDrafts?: ReplyDraftView[];
   unanswered?: OpenClientView[];
   draftsNotice?: string | null;
+  testAccounts?: Row[];
+  coachLogins?: Row[];
+  testFlagsReady?: boolean;
 }
 
 function timeAgo(iso: string) {
@@ -167,7 +170,7 @@ function useIsNarrow(): boolean {
   return narrow;
 }
 
-export default function CommandCentre({ active, earlyWarnings = [], pending, recentCheckIns, recentMessages, recentMealLogs, recentTrainingSessions, tasks: initialTasks, coachNotes, replyDrafts = [], unanswered = [], draftsNotice = null }: Props) {
+export default function CommandCentre({ active, earlyWarnings = [], pending, recentCheckIns, recentMessages, recentMealLogs, recentTrainingSessions, tasks: initialTasks, coachNotes, replyDrafts = [], unanswered = [], draftsNotice = null, testAccounts = [], coachLogins = [], testFlagsReady = true }: Props) {
   const [tasks, setTasks] = useState<Row[]>(initialTasks);
   const [newTask, setNewTask] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState<"HIGH" | "MED" | "LOW">("MED");
@@ -176,7 +179,7 @@ export default function CommandCentre({ active, earlyWarnings = [], pending, rec
   const narrow = useIsNarrow();
 
   const clientMembers = active.filter(
-    (p) => !["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"].includes(p.email)
+    (p) => !p.is_test && !["n.adams3@icloud.com", "nicosmada3@googlemail.com", "nick@back2strong.online"].includes(p.email)
   );
 
   // Live client interactions — check-ins, training, meals, messages, newest first.
@@ -306,6 +309,12 @@ export default function CommandCentre({ active, earlyWarnings = [], pending, rec
         })}
       </div>
 
+      <Link href="/admin/invite" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 8, padding: "11px 12px", borderRadius: 12, border: `1px dashed rgba(200,150,90,0.3)`, marginBottom: 6 }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke={B} strokeWidth={2} style={{ width: 15, height: 15 }}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+        <span style={{ fontFamily: inter, fontSize: 12, color: B, fontWeight: 600 }}>Invite a client</span>
+      </Link>
       <Link href="/admin/new" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 8, padding: "11px 12px", borderRadius: 12, border: `1px dashed rgba(200,150,90,0.3)`, marginBottom: 6 }}>
         <svg viewBox="0 0 24 24" fill="none" stroke={B} strokeWidth={2} style={{ width: 15, height: 15 }}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -324,6 +333,31 @@ export default function CommandCentre({ active, earlyWarnings = [], pending, rec
         </svg>
         <span style={{ fontFamily: inter, fontSize: 12, color: B, fontWeight: 600 }}>Pending recipes</span>
       </Link>
+
+      {!testFlagsReady && (
+        <p style={{ fontFamily: inter, fontSize: 11, color: MUTED, lineHeight: 1.5, marginTop: 14 }}>
+          Test accounts can&apos;t be hidden yet. Apply migration 0018_client_onboarding.sql in the Supabase SQL editor, then mark them on each profile.
+        </p>
+      )}
+      {(testAccounts.length > 0 || coachLogins.length > 0) && (
+        <details style={{ marginTop: 14 }}>
+          <summary style={{ fontFamily: inter, fontSize: 11, color: MUTED, cursor: "pointer" }}>
+            Not in the client list · {testAccounts.length + coachLogins.length}
+          </summary>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+            {testAccounts.map((p) => (
+              <Link key={p.id} href={`/admin/users/${p.id}`} style={{ textDecoration: "none", fontFamily: inter, fontSize: 12, color: TEXT }}>
+                {p.full_name ?? p.email} · test
+              </Link>
+            ))}
+            {coachLogins.map((p) => (
+              <Link key={p.id} href={`/admin/users/${p.id}`} style={{ textDecoration: "none", fontFamily: inter, fontSize: 12, color: TEXT }}>
+                {p.full_name ?? p.email} · coach login
+              </Link>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 

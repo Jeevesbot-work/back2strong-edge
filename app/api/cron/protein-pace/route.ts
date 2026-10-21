@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { composeNudge, paceStatus, type RecipeSuggestion } from "@/lib/protein-pace";
+import { testColumnMissing } from "@/lib/clients/roster";
 
 // web-push needs the Node crypto runtime, not Edge.
 export const runtime = "nodejs";
@@ -63,10 +64,18 @@ export async function GET(req: NextRequest) {
   const userIds = (activeStates ?? []).map((s) => s.user_id).filter(Boolean);
   if (userIds.length === 0) return NextResponse.json({ ok: true, considered: 0, sent: 0 });
 
-  const { data: profiles, error: profErr } = await supabase
+  const flagged = await supabase
     .from("profiles")
-    .select("id, full_name, protein_target, barrier_tags, last_protein_nudge_date")
+    .select("id, full_name, protein_target, barrier_tags, last_protein_nudge_date, is_test")
     .in("id", userIds);
+  const profilesResult = flagged.error && testColumnMissing(flagged.error)
+    ? await supabase
+      .from("profiles")
+      .select("id, full_name, protein_target, barrier_tags, last_protein_nudge_date")
+      .in("id", userIds)
+    : flagged;
+  const profiles = profilesResult.data;
+  const profErr = profilesResult.error;
   if (profErr) {
     console.error("[protein-pace] profiles error:", profErr);
     return NextResponse.json({ error: "Could not load profiles" }, { status: 500 });
@@ -103,6 +112,10 @@ export async function GET(req: NextRequest) {
   let sentCount = 0;
 
   for (const p of profiles ?? []) {
+    if ("is_test" in p && p.is_test === true) {
+      results.push({ name: p.full_name, skipped: "test_account" });
+      continue;
+    }
     const target = p.protein_target ?? 0;
     if (target <= 0) continue;
 

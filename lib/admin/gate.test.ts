@@ -108,6 +108,7 @@ describe("admin gate", () => {
       "app/admin/audits/page.tsx",
       "app/admin/users/[id]/welcome/page.tsx",
       "app/admin/recipes/page.tsx",
+      "app/admin/invite/page.tsx",
     ]) {
       const src = readFileSync(page, "utf8");
       assert.equal(src.includes("REQUIRE_ADMIN_LOGIN"), false, page);

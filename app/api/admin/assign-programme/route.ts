@@ -4,9 +4,12 @@ import type { Programme } from "@/types";
 import { BARRY_PROGRAMME } from "@/lib/data/barry-programme";
 import { BARRY_PROGRAMME_BLOCK2, BARRY_BLOCK2_SESSIONS } from "@/lib/data/barry-programme-block2";
 import { ALEX_GALE_PROGRAMME } from "@/lib/data/alex-gale-programme";
+import { STARTER_PROGRAMME, STARTER_SESSIONS } from "@/lib/data/starter-programme";
+import { programmeAssignmentBlock } from "@/lib/clients/assignment";
 import { isAuthorisedAdmin } from "@/lib/admin/auth";
 
 const PROGRAMMES: Record<string, { programme: Programme; sessions?: unknown }> = {
+  "starter-foundations": { programme: STARTER_PROGRAMME, sessions: STARTER_SESSIONS },
   "barry-strong90-block1": { programme: BARRY_PROGRAMME, sessions: {} },
   "barry-strong90-block2": { programme: BARRY_PROGRAMME_BLOCK2, sessions: BARRY_BLOCK2_SESSIONS },
   "alex-gale-strong90-block1": { programme: ALEX_GALE_PROGRAMME, sessions: {} },
@@ -41,13 +44,9 @@ export async function POST(req: NextRequest) {
     .eq("id", userId)
     .single();
 
-  const owner = entry.programme.owner?.toLowerCase() ?? "";
-  const clientName = (targetProfile?.full_name ?? "").toLowerCase();
-  if (owner && clientName && !clientName.includes(owner.split(" ")[0])) {
-    return NextResponse.json(
-      { error: `Blocked: this programme is written for "${entry.programme.owner}" but the client is "${targetProfile?.full_name}". Wrong client selected.` },
-      { status: 400 },
-    );
+  const blocked = programmeAssignmentBlock(entry.programme, targetProfile?.full_name ?? "");
+  if (blocked) {
+    return NextResponse.json({ error: blocked }, { status: 400 });
   }
 
   const { error } = await admin

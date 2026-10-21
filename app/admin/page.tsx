@@ -4,6 +4,7 @@ import CommandCentre from "./CommandCentre";
 import { detectEarlyWarnings, type ActivityStamps } from "@/lib/coach/signals";
 import { draftsTableMissing, openClientMessages, replyAgeLabel, type ThreadMessage } from "@/lib/coach/replies";
 import type { OpenClientView, ReplyDraftView } from "@/components/admin/ReplyDrafts";
+import { loadRosterProfiles, partitionProfiles, withoutTestUsers } from "@/lib/clients/roster";
 
 export default async function AdminPage() {
   await requireAdminPage();
@@ -14,7 +15,7 @@ export default async function AdminPage() {
   const cutoff = new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString();
 
   const [
-    { data: profiles },
+    roster,
     { data: recentCheckIns },
     { data: recentMessages },
     { data: recentMealLogs },
@@ -27,7 +28,9 @@ export default async function AdminPage() {
     { data: threadRows },
     draftResult,
   ] = await Promise.all([
-    admin.from("profiles").select("id, full_name, email, approved, created_at").order("created_at", { ascending: false }),
+    loadRosterProfiles((columns) =>
+      admin.from("profiles").select(columns).order("created_at", { ascending: false }),
+    ),
     admin.from("check_ins").select("*, profiles(full_name)").gte("created_at", cutoff).order("created_at", { ascending: false }),
     admin.from("messages").select("*, profiles(full_name)").eq("role", "user").gte("created_at", cutoff).order("created_at", { ascending: false }).limit(20),
     admin.from("nutrition_logs").select("*, profiles(full_name)").gte("created_at", cutoff).order("created_at", { ascending: false }).limit(20),
@@ -41,10 +44,10 @@ export default async function AdminPage() {
     admin.from("coach_reply_drafts").select("id, user_id, content, created_at, client_message_id").eq("status", "pending").order("created_at", { ascending: false }).limit(50),
   ]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pending = (profiles ?? []).filter((p: any) => !p.approved);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const active = (profiles ?? []).filter((p: any) => p.approved);
+  const profiles = roster.profiles;
+  const testIds = new Set(profiles.filter((profile) => profile.is_test).map((profile) => profile.id));
+  const split = partitionProfiles(profiles, ADMIN_EMAILS);
+  const pending = split.pending;
 
   // Build last-check-in map per user
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,7 +72,8 @@ export default async function AdminPage() {
   // Attach last check-in date and a unified "last seen" (most recent of any
   // activity type) to active profiles.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const activeWithActivity = active.map((p: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const activeWithActivity = split.clients.map((p: any) => {
     const stamps = [lastCheckInMap[p.id], lastTrainingMap[p.id], lastMealMap[p.id]].filter(Boolean) as string[];
     const lastSeen = stamps.length
       ? stamps.reduce((latest, s) => (new Date(s).getTime() > new Date(latest).getTime() ? s : latest))
@@ -85,7 +89,7 @@ export default async function AdminPage() {
   // losing momentum while they're still engaged, before the 3-day "quiet"
   // flag would fire. See lib/coach/signals.ts.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const clientProfiles = activeWithActivity.filter((p: any) => !ADMIN_EMAILS.includes(p.email));
+  const clientProfiles = activeWithActivity;
   const stampsByUser: Record<string, string[]> = {};
   const pushStamp = (userId: string, stamp?: string | null) => {
     if (!stamp) return;
@@ -112,18 +116,18 @@ export default async function AdminPage() {
   const earlyWarnings = detectEarlyWarnings(signalInput);
 
   const nameById = new Map<string, string>();
-  const adminIds = new Set<string>();
-  for (const profile of profiles ?? []) {
+  const hiddenIds = new Set<string>(testIds);
+  for (const profile of profiles) {
     nameById.set(profile.id, profile.full_name || profile.email || "Client");
     const email = String(profile.email ?? "").toLowerCase();
-    if (email && ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === email)) adminIds.add(profile.id);
+    if (email && ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === email)) hiddenIds.add(profile.id);
   }
   const textById = new Map<string, string>();
   const thread: ThreadMessage[] = [];
   for (const row of threadRows ?? []) {
     if ((row.role !== "user" && row.role !== "assistant") || typeof row.content !== "string" || !row.created_at) continue;
     textById.set(row.id, row.content);
-    if (adminIds.has(row.user_id)) continue;
+    if (hiddenIds.has(row.user_id)) continue;
     thread.push({ id: row.id, userId: row.user_id, role: row.role, content: row.content, createdAt: row.created_at });
   }
   const now = Date.now();
@@ -145,7 +149,7 @@ export default async function AdminPage() {
       ? "Couldn't load reply drafts."
       : null;
   const replyDrafts: ReplyDraftView[] = draftsNotice ? [] : (draftResult.data ?? []).flatMap((row) => {
-    if (!row.id || !row.user_id || typeof row.content !== "string") return [];
+    if (!row.id || !row.user_id || hiddenIds.has(row.user_id) || typeof row.content !== "string") return [];
     const name = nameById.get(row.user_id) ?? "Client";
     return [{
       id: row.id,
@@ -162,15 +166,18 @@ export default async function AdminPage() {
       active={activeWithActivity}
       earlyWarnings={earlyWarnings}
       pending={pending}
-      recentCheckIns={recentCheckIns ?? []}
-      recentMessages={recentMessages ?? []}
-      recentMealLogs={Array.isArray(recentMealLogs) ? recentMealLogs : []}
-      recentTrainingSessions={Array.isArray(recentTrainingSessions) ? recentTrainingSessions : []}
+      recentCheckIns={withoutTestUsers(recentCheckIns, testIds, (row) => row.user_id)}
+      recentMessages={withoutTestUsers(recentMessages, testIds, (row) => row.user_id)}
+      recentMealLogs={withoutTestUsers(Array.isArray(recentMealLogs) ? recentMealLogs : [], testIds, (row) => row.user_id)}
+      recentTrainingSessions={withoutTestUsers(Array.isArray(recentTrainingSessions) ? recentTrainingSessions : [], testIds, (row) => row.user_id)}
       tasks={Array.isArray(tasks) ? tasks : []}
       coachNotes={Array.isArray(coachNotes) ? coachNotes.filter((n) => !String((n as { tag?: string }).tag ?? "").startsWith("audit:")) : []}
       replyDrafts={replyDrafts}
       unanswered={unanswered}
       draftsNotice={draftsNotice}
+      testAccounts={split.testAccounts}
+      coachLogins={split.coaches}
+      testFlagsReady={roster.flagReady}
     />
   );
 }

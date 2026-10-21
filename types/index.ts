@@ -12,6 +12,8 @@ export interface Profile {
   protein_target: number;
   calorie_target: number;
   approved: boolean;
+  /** Coach-only. Hidden from client lists when true. Absent until migration 0018. */
+  is_test?: boolean;
   created_at: string;
   updated_at: string;
 }

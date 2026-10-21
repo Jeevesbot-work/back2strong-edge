@@ -83,7 +83,7 @@ describe("security wiring", () => {
     const train = read("app/(app)/train/page.tsx");
     assert.equal(train.includes("BARRY_PROGRAMME"), false);
     assert.match(train, /AwaitingProgramme/);
-    assert.match(read("components/AwaitingProgramme.tsx"), /Your plan is being prepared/);
+    assert.match(read("components/AwaitingProgramme.tsx"), /Your programme is being built by Nick/);
   });
 
   it("checks the viewer before using the preview cookie on client pages", () => {

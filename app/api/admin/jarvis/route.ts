@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase/server";
 import { isAuthorisedAdmin } from "@/lib/admin/auth";
 import { detectEarlyWarnings, type ActivityStamps } from "@/lib/coach/signals";
+import { loadRosterProfiles, partitionProfiles } from "@/lib/clients/roster";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -20,13 +21,15 @@ async function buildBriefContext(): Promise<{ context: string; clients: ClientRe
   const admin = createAdminClient();
 
   const [
-    { data: profiles },
+    roster,
     { data: tasks },
     { data: checkIns },
     { data: training },
     { data: meals },
   ] = await Promise.all([
-    admin.from("profiles").select("id, full_name, email, approved, created_at").order("created_at", { ascending: false }),
+    loadRosterProfiles((columns) =>
+      admin.from("profiles").select(columns).order("created_at", { ascending: false }),
+    ),
     admin.from("admin_tasks").select("*").eq("done", false).order("position", { ascending: true }),
     admin.from("check_ins").select("user_id, date, weight_kg").order("date", { ascending: false }).limit(400),
     admin.from("training_sessions").select("user_id, completed_at, created_at").order("created_at", { ascending: false }).limit(200),
@@ -46,16 +49,13 @@ async function buildBriefContext(): Promise<{ context: string; clients: ClientRe
     if (typeof c.weight_kg === "number" && c.date) (weightsByUser[c.user_id] ??= []).push({ date: c.date, kg: c.weight_kg });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const clientRows = (profiles ?? []).filter((p: any) => p.approved && !COACH_EMAILS.includes(p.email));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pendingRows = (profiles ?? []).filter((p: any) => !p.approved);
+  const { clients: clientRows, pending: pendingRows } = partitionProfiles(roster.profiles, COACH_EMAILS);
 
-  const clients: ClientRef[] = clientRows.map((p) => ({ id: p.id, name: p.full_name ?? p.email }));
+  const clients: ClientRef[] = clientRows.map((p) => ({ id: p.id, name: p.full_name || p.email || "Client" }));
 
   const signalInput: ActivityStamps[] = clientRows.map((p) => ({
     userId: p.id,
-    name: p.full_name ?? p.email,
+    name: p.full_name || p.email || "Client",
     stamps: stampsByUser[p.id] ?? [],
     weights: weightsByUser[p.id] ?? [],
   }));

@@ -113,7 +113,7 @@ export default function AddClientPage() {
         </Link>
         <div>
           <h1 className="font-condensed font-black text-2xl uppercase tracking-wide">Add New Client</h1>
-          <p className="text-edge-muted text-xs">Creates profile, approves access, sends magic link</p>
+          <p className="text-edge-muted text-xs">Creates profile, approves access, sends magic link. To copy a link and send it yourself, use <Link href="/admin/invite" className="text-edge-bronze">Invite a client</Link>.</p>
         </div>
       </div>
 
