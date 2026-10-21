@@ -104,7 +104,7 @@ export default async function AdminUserPage({ params }: { params: { id: string }
     href: "#messages",
   }));
   const draftsNotice = draftsTableMissing(draftResult.error)
-    ? "Reply drafts are not in the database yet. Apply migration 0016_coach_reply_drafts.sql in the Supabase SQL editor."
+    ? "Reply drafts are not in the database yet. Apply migration 0017_coach_reply_drafts.sql in the Supabase SQL editor."
     : draftResult.error
       ? "Couldn't load reply drafts."
       : null;

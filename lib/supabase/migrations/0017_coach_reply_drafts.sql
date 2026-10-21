@@ -4,10 +4,11 @@
 -- edit, or discard. They are not written to public.messages until he approves,
 -- so the client cannot read them through the messages RLS policy.
 --
--- This file is the change. It has NOT been applied to production.
--- Apply it by hand in the Supabase SQL editor (project xlrvcfxgvxfyrmduztza)
--- before relying on the new coach-draft flow. Safe to run before the app
--- deploy: nothing in the previous app reads this table.
+-- Applied to xlrvcfxgvxfyrmduztza on 21 Oct 2026 with Nick's approval
+-- (supabase_migrations version 20261021151309, name coach_reply_drafts).
+-- Numbered 0017 because 0016 is revoke_anon_execute_definer_fns, applied
+-- 19 Oct 2026. Safe to re-run: every statement uses IF NOT EXISTS or is a
+-- grant/revoke. Nothing in the previous app reads this table.
 --
 -- What it changes:
 --   * Creates public.coach_reply_drafts
