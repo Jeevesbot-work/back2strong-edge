@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { ReplyDraftList, UnansweredList, type OpenClientView, type ReplyDraftView } from "@/components/admin/ReplyDrafts";
 
 const B = "#C8965A";
 const BG = "#0A0A0A";
@@ -34,6 +35,9 @@ interface Props {
   recentTrainingSessions: Row[];
   tasks: Row[];
   coachNotes: Row[];
+  replyDrafts?: ReplyDraftView[];
+  unanswered?: OpenClientView[];
+  draftsNotice?: string | null;
 }
 
 function timeAgo(iso: string) {
@@ -163,7 +167,7 @@ function useIsNarrow(): boolean {
   return narrow;
 }
 
-export default function CommandCentre({ active, earlyWarnings = [], pending, recentCheckIns, recentMessages, recentMealLogs, recentTrainingSessions, tasks: initialTasks, coachNotes }: Props) {
+export default function CommandCentre({ active, earlyWarnings = [], pending, recentCheckIns, recentMessages, recentMealLogs, recentTrainingSessions, tasks: initialTasks, coachNotes, replyDrafts = [], unanswered = [], draftsNotice = null }: Props) {
   const [tasks, setTasks] = useState<Row[]>(initialTasks);
   const [newTask, setNewTask] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState<"HIGH" | "MED" | "LOW">("MED");
@@ -195,7 +199,7 @@ export default function CommandCentre({ active, earlyWarnings = [], pending, rec
     (c) => (c.morning_energy && c.morning_energy <= 2) || (c.sleep_quality && c.sleep_quality <= 2)
   );
 
-  const attentionCount = quietClients.length + lowReadiness.length;
+  const attentionCount = quietClients.length + lowReadiness.length + unanswered.length + replyDrafts.length;
 
   // ── Briefing items ── same underlying data as the panels below, ranked:
   // longest-quiet clients first, then pending sign-ups, then high-priority
@@ -203,6 +207,20 @@ export default function CommandCentre({ active, earlyWarnings = [], pending, rec
   // not another wall to read.
   const highPriorityOpenTasks = tasks.filter((t) => !t.done && (t.priority ?? "MED") === "HIGH");
   const briefingItems: BriefingItem[] = [
+    ...unanswered.map((item) => ({
+      key: `unanswered-${item.messageId}`,
+      href: item.href,
+      tone: "urgent" as const,
+      text: `${item.name} has been waiting ${item.ageLabel} for a reply.`,
+    })),
+    ...(replyDrafts.length > 0
+      ? [{
+          key: "drafts",
+          href: `/admin/users/${replyDrafts[0].userId}`,
+          tone: "warn" as const,
+          text: `${replyDrafts.length} coach reply draft${replyDrafts.length === 1 ? "" : "s"} to approve.`,
+        }]
+      : []),
     ...quietClients.map(({ p, d }) => ({
       key: `q-${p.id}`,
       href: `/admin/users/${p.id}`,
@@ -315,6 +333,17 @@ export default function CommandCentre({ active, earlyWarnings = [], pending, rec
       {/* Needs attention */}
       <div style={{ marginBottom: 26 }}>
         <p style={sectionHeader}>Needs Attention {attentionCount > 0 && <span style={{ color: B }}>· {attentionCount}</span>}</p>
+        {(unanswered.length > 0 || replyDrafts.length > 0 || draftsNotice) && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+            {draftsNotice && (
+              <div style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 14, padding: "12px 14px" }}>
+                <p style={{ fontFamily: inter, fontSize: 13, color: "#FBBF24", lineHeight: 1.45 }}>{draftsNotice}</p>
+              </div>
+            )}
+            <UnansweredList items={unanswered} />
+            <ReplyDraftList drafts={replyDrafts} />
+          </div>
+        )}
         {attentionCount === 0 ? (
           <div style={{ background: SURFACE2, borderRadius: 14, border: `1px solid ${BORDER}`, padding: "18px 20px" }}>
             <p style={{ fontFamily: inter, fontSize: 13, color: "#34D399", fontWeight: 600 }}>Everyone&apos;s recently active.</p>

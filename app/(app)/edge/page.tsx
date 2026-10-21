@@ -21,7 +21,6 @@ export default function EdgePage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [streaming, setStreaming] = useState("");
   const [error, setError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -30,7 +29,7 @@ export default function EdgePage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streaming]);
+  }, [messages, loading]);
 
   async function loadMessages() {
     const supabase = createClient();
@@ -74,29 +73,12 @@ export default function EdgePage() {
         setError(data.error || "Couldn't send that. Try again.");
         return;
       }
-      if (!res.body) throw new Error("Failed");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let full = "";
-      setStreaming(" ");
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        full += decoder.decode(value);
-        setStreaming(full);
-      }
-
-      setStreaming("");
-      setMessages((prev) => [...prev, {
-        id: `temp-a-${Date.now()}`,
-        role: "assistant",
-        content: full,
-        created_at: new Date().toISOString(),
-      }]);
+      // The reply is a draft for Nick. It is not returned, and it is not shown here.
+      await res.json().catch(() => ({}));
     } catch {
-      setStreaming("");
+      setMessages((prev) => prev.filter((m) => m.id !== tempUser.id));
+      setInput(msg);
+      setError("Couldn't send that. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -106,7 +88,8 @@ export default function EdgePage() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   }
 
-  const isEmpty = messages.length === 0 && !streaming;
+  const isEmpty = messages.length === 0 && !loading;
+  const awaitingCoach = messages.length > 0 && messages[messages.length - 1]?.role === "user";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100svh", background: "#0E1014", maxWidth: 512, margin: "0 auto" }}>
@@ -176,21 +159,13 @@ export default function EdgePage() {
           </div>
         ))}
 
-        {streaming && (
-          <div style={{ display: "flex", justifyContent: "flex-start", gap: 10 }}>
-            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(200,150,90,0.1)", border: "1px solid rgba(200,150,90,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
-              <span style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 12, color: "#C8965A" }}>N</span>
-            </div>
-            <div style={{ maxWidth: "78%", borderRadius: "18px 18px 18px 4px", padding: "12px 16px", fontSize: 14, fontFamily: "Inter, sans-serif", lineHeight: 1.55, background: "#171B21", color: "rgba(242,241,237,0.85)", border: "1px solid #252A32" }}>
-              {streaming === " " ? (
-                <div style={{ display: "flex", gap: 4, alignItems: "center", height: 20 }}>
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="typing-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: "#C8965A" }} />
-                  ))}
-                </div>
-              ) : streaming}
-            </div>
-          </div>
+        {loading && (
+          <p style={{ textAlign: "center", fontSize: 12, color: "#9BA3AF", fontFamily: "Inter, sans-serif" }}>Sending…</p>
+        )}
+        {!loading && awaitingCoach && (
+          <p style={{ textAlign: "center", fontSize: 12, color: "#9BA3AF", fontFamily: "Inter, sans-serif", lineHeight: 1.45 }}>
+            Sent. Nick will reply in this chat.
+          </p>
         )}
 
         <div ref={bottomRef} />

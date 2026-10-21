@@ -2,6 +2,8 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { ADMIN_EMAILS, requireAdminPage } from "@/lib/admin/auth";
 import CommandCentre from "./CommandCentre";
 import { detectEarlyWarnings, type ActivityStamps } from "@/lib/coach/signals";
+import { draftsTableMissing, openClientMessages, replyAgeLabel, type ThreadMessage } from "@/lib/coach/replies";
+import type { OpenClientView, ReplyDraftView } from "@/components/admin/ReplyDrafts";
 
 export default async function AdminPage() {
   await requireAdminPage();
@@ -22,6 +24,8 @@ export default async function AdminPage() {
     { data: lastCheckIns },
     { data: lastTraining },
     { data: lastMeals },
+    { data: threadRows },
+    draftResult,
   ] = await Promise.all([
     admin.from("profiles").select("id, full_name, email, approved, created_at").order("created_at", { ascending: false }),
     admin.from("check_ins").select("*, profiles(full_name)").gte("created_at", cutoff).order("created_at", { ascending: false }),
@@ -33,6 +37,8 @@ export default async function AdminPage() {
     admin.from("check_ins").select("user_id, date, weight_kg, profiles(full_name)").order("date", { ascending: false }).limit(400),
     admin.from("training_sessions").select("user_id, completed_at, created_at").order("created_at", { ascending: false }).limit(200),
     admin.from("nutrition_logs").select("user_id, created_at").order("created_at", { ascending: false }).limit(200),
+    admin.from("messages").select("id, user_id, role, content, created_at").order("created_at", { ascending: false }).limit(1000),
+    admin.from("coach_reply_drafts").select("id, user_id, content, created_at, client_message_id").eq("status", "pending").order("created_at", { ascending: false }).limit(50),
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -105,6 +111,52 @@ export default async function AdminPage() {
   }));
   const earlyWarnings = detectEarlyWarnings(signalInput);
 
+  const nameById = new Map<string, string>();
+  const adminIds = new Set<string>();
+  for (const profile of profiles ?? []) {
+    nameById.set(profile.id, profile.full_name || profile.email || "Client");
+    const email = String(profile.email ?? "").toLowerCase();
+    if (email && ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === email)) adminIds.add(profile.id);
+  }
+  const textById = new Map<string, string>();
+  const thread: ThreadMessage[] = [];
+  for (const row of threadRows ?? []) {
+    if ((row.role !== "user" && row.role !== "assistant") || typeof row.content !== "string" || !row.created_at) continue;
+    textById.set(row.id, row.content);
+    if (adminIds.has(row.user_id)) continue;
+    thread.push({ id: row.id, userId: row.user_id, role: row.role, content: row.content, createdAt: row.created_at });
+  }
+  const now = Date.now();
+  const unanswered: OpenClientView[] = openClientMessages(thread, now)
+    .filter((row) => row.overdue)
+    .map((row) => ({
+      messageId: row.messageId,
+      userId: row.userId,
+      name: nameById.get(row.userId) ?? "Client",
+      content: row.content,
+      ageLabel: replyAgeLabel(row.ageMs),
+      overdue: true,
+      href: `/admin/users/${row.userId}`,
+    }));
+
+  const draftsNotice = draftsTableMissing(draftResult.error)
+    ? "Reply drafts are not in the database yet. Apply migration 0016_coach_reply_drafts.sql in the Supabase SQL editor."
+    : draftResult.error
+      ? "Couldn't load reply drafts."
+      : null;
+  const replyDrafts: ReplyDraftView[] = draftsNotice ? [] : (draftResult.data ?? []).flatMap((row) => {
+    if (!row.id || !row.user_id || typeof row.content !== "string") return [];
+    const name = nameById.get(row.user_id) ?? "Client";
+    return [{
+      id: row.id,
+      userId: row.user_id,
+      clientName: name.split(" ")[0] || name,
+      clientMessage: row.client_message_id ? textById.get(row.client_message_id) ?? null : null,
+      content: row.content,
+      createdAt: row.created_at,
+    }];
+  });
+
   return (
     <CommandCentre
       active={activeWithActivity}
@@ -116,6 +168,9 @@ export default async function AdminPage() {
       recentTrainingSessions={Array.isArray(recentTrainingSessions) ? recentTrainingSessions : []}
       tasks={Array.isArray(tasks) ? tasks : []}
       coachNotes={Array.isArray(coachNotes) ? coachNotes.filter((n) => !String((n as { tag?: string }).tag ?? "").startsWith("audit:")) : []}
+      replyDrafts={replyDrafts}
+      unanswered={unanswered}
+      draftsNotice={draftsNotice}
     />
   );
 }
