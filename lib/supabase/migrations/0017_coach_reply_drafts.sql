@@ -7,7 +7,8 @@
 -- Applied to xlrvcfxgvxfyrmduztza on 21 Oct 2026 with Nick's approval
 -- (supabase_migrations version 20261021151309, name coach_reply_drafts).
 -- Numbered 0017 because 0016 is revoke_anon_execute_definer_fns, applied
--- 19 Oct 2026. Safe to re-run: every statement uses IF NOT EXISTS or is a
+-- 19 Oct 2026. The statements below match the SQL applied in production.
+-- Safe to re-run: every statement uses IF NOT EXISTS or is a
 -- grant/revoke. Nothing in the previous app reads this table.
 --
 -- What it changes:
