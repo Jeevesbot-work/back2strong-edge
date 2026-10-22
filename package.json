@@ -11,7 +11,7 @@
     "recipes:import": "tsx scripts/import-recipes.ts",
     "test:recipes": "tsx --test lib/recipe-import/import.test.ts",
     "test:coach": "tsx --test lib/coach/message.test.ts lib/coach/replies.test.ts",
-    "test:security": "tsx --test lib/security/access.test.ts lib/admin/gate.test.ts",
+    "test:security": "tsx --test lib/security/access.test.ts lib/admin/gate.test.ts lib/view-as.test.ts lib/auth/email-typo.test.ts",
     "test:nutrition": "tsx --test lib/nutrition/photo-frame.test.ts",
     "test:week": "tsx --test lib/training/week.test.ts",
     "test:logs": "tsx --test lib/logs/duplicate.test.ts",

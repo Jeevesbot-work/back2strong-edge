@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { ADMIN_COOKIE, configuredAdminKey, decideAdminGate } from "@/lib/admin/gate";
+import { ADMIN_COOKIE, configuredAdminKey, decideAdminGate, isAdminEmail } from "@/lib/admin/gate";
+import { clientMutationDecision } from "@/lib/view-as";
 
 // Private-link gate for the coach admin area.
 // A configured ADMIN_ACCESS_KEY lets the coach's bookmark cookie (or ?key=)
@@ -37,7 +38,9 @@ export async function middleware(req: NextRequest) {
   let email: string | null = null;
   const cookieOk = !!accessKey && cookie === accessKey;
   const keyParamOk = !!accessKey && keyParam === accessKey;
-  if (!cookieOk && !keyParamOk) {
+  const previewId = req.cookies.get("preview_user_id")?.value;
+  const gated = pathname === "/" || pathname === "/admin" || pathname.startsWith("/admin/") || pathname.startsWith("/api/admin");
+  if (!cookieOk && !keyParamOk && (gated || !!previewId)) {
     try {
       const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -50,6 +53,18 @@ export async function middleware(req: NextRequest) {
       // Supabase unreachable — fall through. A matching cookie was already handled.
     }
   }
+
+  const viewing = clientMutationDecision({
+    method: req.method,
+    pathname,
+    previewId,
+    isAdmin: cookieOk || keyParamOk || isAdminEmail(email),
+  });
+  if (viewing.block) {
+    return NextResponse.json({ error: viewing.error, readOnly: true }, { status: viewing.status });
+  }
+
+  if (!gated) return NextResponse.next();
 
   const decision = decideAdminGate({
     pathname,
@@ -88,5 +103,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/admin", "/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/", "/admin", "/admin/:path*", "/api/:path*"],
 };

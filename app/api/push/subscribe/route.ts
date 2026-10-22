@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rejectIfViewing } from "@/lib/view-as-server";
 
 // Saves a Web Push subscription for the signed-in client. RLS ensures a user
 // can only ever write their own row (policy: auth.uid() = user_id), so we
 // insert through the user-session client, not the service role.
 export async function POST(req: NextRequest) {
+  const blocked = await rejectIfViewing();
+  if (blocked) return blocked;
+
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });

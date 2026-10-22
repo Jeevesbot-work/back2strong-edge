@@ -65,7 +65,12 @@ export default function ProfilePage() {
       protein_target: parseInt(proteinInput) || 160,
       calorie_target: parseInt(calorieInput) || 2200,
     };
-    await supabase.from("profiles").update(updates).eq("id", user.id);
+    const saved = await fetch("/api/profile/targets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (!saved.ok) { setSavingNutrition(false); return; }
     setProfile((p) => p ? { ...p, ...updates } : p);
     setEditingNutrition(false);
     setSavingNutrition(false);

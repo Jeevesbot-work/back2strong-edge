@@ -21,16 +21,13 @@ export default function SleepPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    await supabase.from("sleep_logs").upsert({
-      user_id: user.id,
-      date: new Date().toISOString().split("T")[0],
-      bedtime,
-      wake_time: wakeTime,
-      quality,
-      duration_hours: duration,
+    const saved = await fetch("/api/sleep", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bedtime, wake_time: wakeTime, quality, duration_hours: duration }),
     });
-
     setSaving(false);
+    if (!saved.ok) return;
     setSaved(true);
     setTimeout(() => router.push("/progress"), 1000);
   }

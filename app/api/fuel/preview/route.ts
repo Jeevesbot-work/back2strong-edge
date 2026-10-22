@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { isAdminViewer } from "@/lib/admin/auth";
-import { resolvePreviewTarget } from "@/lib/preview-user";
+import { resolveActingClient } from "@/lib/acting-client";
 
 // Coach "Preview App" support for the Fuel tab. The Fuel page loads data in
 // the browser for the signed-in user, so on its own it can't show a client
@@ -13,9 +11,8 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ previewing: false });
 
-  const previewId = cookies().get("preview_user_id")?.value;
-  const targetId = resolvePreviewTarget(user.id, previewId, await isAdminViewer(user.email));
-  if (targetId === user.id) return NextResponse.json({ previewing: false });
+  const { targetId, previewing, name } = await resolveActingClient(user.id, user.email);
+  if (!previewing) return NextResponse.json({ previewing: false });
 
   const db = createAdminClient();
   const today = new Date().toISOString().split("T")[0];
@@ -33,7 +30,7 @@ export async function GET() {
 
   return NextResponse.json({
     previewing: true,
-    name: profile?.full_name ?? null,
+    name: name ?? profile?.full_name ?? null,
     profile,
     logs: logs ?? [],
     weekRows: weekRows ?? [],

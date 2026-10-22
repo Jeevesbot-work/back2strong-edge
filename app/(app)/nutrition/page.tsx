@@ -244,7 +244,12 @@ export default function NutritionPage() {
     if (!user) { setApplyingAdjustment(false); return; }
     const delta = adjustment.direction === "increase" ? adjustment.amountKcal : -adjustment.amountKcal;
     const newTarget = Math.max(1200, calorieTarget + delta);
-    await supabase.from("profiles").update({ calorie_target: newTarget }).eq("id", user.id);
+    const saved = await fetch("/api/profile/targets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ calorie_target: newTarget }),
+    });
+    if (!saved.ok) { setApplyingAdjustment(false); return; }
     setCalorieTarget(newTarget);
     localStorage.setItem(`edge_fuel_adjust_snooze_${user.id}`, String(Date.now() + 14 * 86400000));
     setAdjustment(null);
@@ -305,10 +310,12 @@ export default function NutritionPage() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("not signed in");
-      const { error } = wasHero
-        ? await supabase.from("hero_meals").delete().eq("user_id", user.id).eq("recipe_id", recipeId)
-        : await supabase.from("hero_meals").insert({ user_id: user.id, recipe_id: recipeId });
-      if (error) throw error;
+      const saved = await fetch("/api/nutrition/hero", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipeId, starred: !wasHero }),
+      });
+      if (!saved.ok) throw new Error("not saved");
     } catch {
       // Revert the optimistic update and say so briefly — never leave the
       // star showing a state that didn't actually save.
@@ -404,8 +411,16 @@ export default function NutritionPage() {
   }
 
   async function deleteLog(id: string) {
-    const supabase = createClient();
-    await supabase.from("nutrition_logs").delete().eq("id", id);
+    const res = await fetch("/api/nutrition/log", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Couldn't remove that log.");
+      return;
+    }
     setLogs((prev) => prev.filter((l) => l.id !== id));
     if (latest?.id === id) setLatest(null);
   }
@@ -641,7 +656,7 @@ export default function NutritionPage() {
           {/* Push opt-in appears only after the client has logged a meal — a
               natural moment, never on first app open. Self-hides if unsupported
               or already handled. */}
-          <PushOptIn show={logs.length > 0} />
+          <PushOptIn show={logs.length > 0 && !previewName} />
 
           {logs.length > 0 && (
             <div className="anim-2 bg-edge-surface rounded-[20px] p-4 border border-white/[0.08] mb-6">

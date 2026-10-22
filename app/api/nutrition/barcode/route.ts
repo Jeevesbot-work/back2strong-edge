@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireActiveClient } from "@/lib/ai/access";
+import { rejectIfViewing } from "@/lib/view-as-server";
 
 // Look up a scanned barcode against Open Food Facts (free, strong UK coverage)
 // and return clean macros. No AI, no cost — exact label data straight back.
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await rejectIfViewing();
+    if (blocked) return blocked;
+
     const access = await requireActiveClient();
     if (!access.ok) return access.response;
 

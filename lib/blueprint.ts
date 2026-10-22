@@ -1,7 +1,5 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { cookies } from "next/headers";
-import { isAdminViewer } from "@/lib/admin/auth";
-import { resolvePreviewTarget } from "@/lib/preview-user";
+import { resolveActingClient } from "@/lib/acting-client";
 
 // Performance Blueprint data: the day-90 scoreboard (drives the Home ring) and
 // the client's blood panel + doctor debrief (drives the Your Numbers screen).
@@ -52,8 +50,8 @@ export type DoctorReport = {
 export async function resolveBlueprintUser(): Promise<string | null> {
   const { data: { user } } = await createClient().auth.getUser();
   if (!user) return null;
-  const previewId = cookies().get("preview_user_id")?.value;
-  return resolvePreviewTarget(user.id, previewId, await isAdminViewer(user.email));
+  const view = await resolveActingClient(user.id, user.email);
+  return view.targetId;
 }
 
 /** 0–1 progress from baseline to target (0 = Day 1, 1 = target hit). */

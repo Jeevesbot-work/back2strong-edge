@@ -144,12 +144,6 @@ export default async function AdminUserPage({ params }: { params: { id: string }
           {profile?.email && <CopyLoginLinkButton email={profile.email} />}
           {profile?.email && <ResendLinkButton email={profile.email} />}
           <Link
-            href={`/admin/preview/${userId}`}
-            className="bg-edge-bronze/10 border border-edge-bronze/30 text-edge-bronze font-condensed text-xs uppercase px-3 py-1.5 rounded-lg hover:bg-edge-bronze/20 transition-colors"
-          >
-            Preview App
-          </Link>
-          <Link
             href={`/admin/users/${userId}/welcome`}
             className="bg-edge-gold/10 border border-edge-gold/30 text-edge-gold font-condensed text-xs uppercase px-3 py-1.5 rounded-lg hover:bg-edge-gold/20 transition-colors"
           >
@@ -157,6 +151,15 @@ export default async function AdminUserPage({ params }: { params: { id: string }
           </Link>
         </div>
       </div>
+
+      {profile?.is_test !== true && (
+        <Link
+          href={`/admin/preview/${userId}`}
+          className="mb-4 flex items-center justify-center bg-edge-bronze text-edge-bg font-condensed font-bold text-sm uppercase tracking-widest px-4 py-3 rounded-xl"
+        >
+          View as client
+        </Link>
+      )}
 
       <TestAccountToggle userId={userId} isTest={profile?.is_test === true} />
 

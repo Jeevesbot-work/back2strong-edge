@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { reportTargetDate } from "@/lib/day-dates";
+import { rejectIfViewing } from "@/lib/view-as-server";
 
 // "Close the day" — before bed a member talks through anything: jobs for
 // tomorrow, how today went, what's on his mind. Edge turns it into a morning
@@ -32,6 +33,9 @@ const str = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
 
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await rejectIfViewing();
+    if (blocked) return blocked;
+
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });

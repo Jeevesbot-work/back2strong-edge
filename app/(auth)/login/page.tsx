@@ -3,6 +3,7 @@
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { emailTypoHint } from "@/lib/auth/email-typo";
 
 const B = "#C8965A";
 const BG = "#0E1014";
@@ -21,6 +22,7 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
+  const hint = emailTypoHint(email);
 
   async function signInWithGoogle() {
     setGoogleLoading(true);
@@ -81,8 +83,17 @@ function LoginForm() {
               required
               autoFocus
               placeholder="your@email.com"
-              style={{ width: "100%", background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: "14px 16px", color: "#F2F1ED", fontFamily: "Inter, sans-serif", fontSize: 16, outline: "none", marginBottom: 16, boxSizing: "border-box" as const }}
+              style={{ width: "100%", background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: "14px 16px", color: "#F2F1ED", fontFamily: "Inter, sans-serif", fontSize: 16, outline: "none", marginBottom: hint ? 8 : 16, boxSizing: "border-box" as const }}
             />
+            {hint && (
+              <button
+                type="button"
+                onClick={() => setEmail(hint)}
+                style={{ display: "block", width: "100%", textAlign: "left", background: "rgba(200,150,90,0.08)", border: "1px solid rgba(200,150,90,0.35)", borderRadius: 12, padding: "10px 12px", color: B, fontFamily: "Inter, sans-serif", fontSize: 13, cursor: "pointer", marginBottom: 16 }}
+              >
+                Did you mean {hint}?
+              </button>
+            )}
             {error && <p style={{ color: "#F5A623", fontSize: 13, fontFamily: "Inter, sans-serif", marginBottom: 12 }}>{error}</p>}
             <button
               type="submit"

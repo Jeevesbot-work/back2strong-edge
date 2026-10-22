@@ -13,9 +13,10 @@ const fraunces = "Fraunces, Georgia, serif";
 
 const PRESETS = [20, 30, 45];
 
-export default function WalkLogger({ initialMinutes = 0 }: { initialMinutes?: number }) {
+export default function WalkLogger({ initialMinutes = 0, readOnly = false }: { initialMinutes?: number; readOnly?: boolean }) {
   const [total, setTotal] = useState(initialMinutes);
   const [busy, setBusy] = useState<number | null>(null);
+  const [error, setError] = useState("");
   const [custom, setCustom] = useState(false);
   const [customVal, setCustomVal] = useState("");
   const [justAdded, setJustAdded] = useState(false);
@@ -24,6 +25,7 @@ export default function WalkLogger({ initialMinutes = 0 }: { initialMinutes?: nu
   const busyRef = useRef(false);
 
   async function log(minutes: number) {
+    if (readOnly) { setError("Viewing as a client is read-only."); return; }
     if (busyRef.current || !minutes || minutes <= 0) return;
     busyRef.current = true;
     setBusy(minutes);
@@ -34,6 +36,7 @@ export default function WalkLogger({ initialMinutes = 0 }: { initialMinutes?: nu
         body: JSON.stringify({ minutes }),
       });
       const data = await res.json();
+      if (!res.ok) { setError(data.error || "Couldn't save that walk."); return; }
       if (res.ok) {
         setTotal(data.totalToday ?? total + minutes);
         setJustAdded(true);
@@ -59,6 +62,7 @@ export default function WalkLogger({ initialMinutes = 0 }: { initialMinutes?: nu
             </p>
           </div>
         </div>
+        {error && <p style={{ fontFamily: inter, fontSize: 12, color: "#F5A623", marginBottom: 10 }}>{error}</p>}
         {justAdded && (
           <span style={{ fontFamily: inter, fontSize: 11, fontWeight: 600, color: GREEN, display: "flex", alignItems: "center", gap: 4 }}>
             <svg viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth={3} style={{ width: 13, height: 13 }}>

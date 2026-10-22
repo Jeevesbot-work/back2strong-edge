@@ -97,7 +97,8 @@ describe("admin gate", () => {
     const middleware = readFileSync("middleware.ts", "utf8");
     assert.equal(middleware.includes("if (!accessKey) return NextResponse.next()"), false);
     assert.match(middleware, /status: decision\.status/);
-    assert.match(middleware, /matcher:\s*\["\/", "\/admin", "\/admin\/:path\*", "\/api\/admin\/:path\*"\]/);
+    assert.match(middleware, /matcher:\s*\["\/", "\/admin", "\/admin\/:path\*", "\/api\/:path\*"\]/);
+    assert.match(middleware, /clientMutationDecision/);
 
     const auth = readFileSync("lib/admin/auth.ts", "utf8");
     assert.equal(auth.includes("if (!accessKey) return true"), false);

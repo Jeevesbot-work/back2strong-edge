@@ -12,7 +12,13 @@ export default function StartPreview() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId: id }),
-    }).then(() => router.push("/train"));
+    }).then(async (res) => {
+      if (!res.ok) {
+        router.push("/admin");
+        return;
+      }
+      router.push("/home");
+    });
   }, [id, router]);
 
   return (

@@ -12,7 +12,7 @@ export default function ExitPreviewButton() {
       background: "rgba(0,0,0,0.15)", border: "none", borderRadius: 6,
       padding: "4px 10px", cursor: "pointer",
     }}>
-      Exit Preview
+      Exit
     </button>
   );
 }
