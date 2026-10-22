@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ALREADY_LOGGED, foodIsDuplicate, recentFoodLogs } from "@/lib/logs/duplicate";
+import { rejectIfViewing } from "@/lib/view-as-server";
 
 // Direct logs (barcode, recipe, typed macros) that do not go through the model.
 // Auth matches the old client insert: a signed-in user, with RLS limiting the row
 // to themselves. The approval gate stays on the AI routes only.
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await rejectIfViewing();
+    if (blocked) return blocked;
+
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
@@ -54,4 +58,26 @@ export async function POST(req: NextRequest) {
     console.error("[nutrition] direct log error:", err);
     return NextResponse.json({ error: "Couldn't save that log. Try again." }, { status: 500 });
   }
+}
+
+export async function DELETE(req: NextRequest) {
+  const blocked = await rejectIfViewing();
+  if (blocked) return blocked;
+
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
+
+  let id = "";
+  try {
+    const body = await req.json();
+    id = String(body.id ?? "");
+  } catch {
+    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "Missing log" }, { status: 400 });
+
+  const { error } = await supabase.from("nutrition_logs").delete().eq("id", id).eq("user_id", user.id);
+  if (error) return NextResponse.json({ error: "Couldn't remove that log." }, { status: 500 });
+  return NextResponse.json({ ok: true });
 }

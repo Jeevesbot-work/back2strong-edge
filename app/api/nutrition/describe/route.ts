@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { requireActiveClient } from "@/lib/ai/access";
 import { enforceDailyCap } from "@/lib/ai/quota";
 import { ALREADY_LOGGED, foodIsDuplicate, recentFoodLogs } from "@/lib/logs/duplicate";
+import { rejectIfViewing } from "@/lib/view-as-server";
 
 // "Tell Edge what you ate" — spoken or typed food logging.
 //
@@ -34,6 +35,9 @@ const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : Number(v
 
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await rejectIfViewing();
+    if (blocked) return blocked;
+
     const access = await requireActiveClient();
     if (!access.ok) return access.response;
     const { supabase, userId, isAdmin } = access;

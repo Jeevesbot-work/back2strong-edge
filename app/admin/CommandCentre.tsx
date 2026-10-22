@@ -291,20 +291,25 @@ export default function CommandCentre({ active, earlyWarnings = [], pending, rec
           const alertLabel = d === null ? "No activity yet" : d === 0 ? "Active today" : `Quiet ${d}d`;
           const stale = d !== null && d >= 3;
           return (
-            <Link key={p.id} href={`/admin/users/${p.id}`} style={{ textDecoration: "none" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 12px", borderRadius: 12, background: stale ? "rgba(248,113,113,0.06)" : SURFACE2, border: stale ? "1px solid rgba(248,113,113,0.25)" : "1px solid transparent" }}>
-                <div style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(200,150,90,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <span style={{ fontFamily: inter, fontSize: 12, fontWeight: 700, color: B }}>{(p.full_name ?? p.email)[0].toUpperCase()}</span>
+            <div key={p.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <Link href={`/admin/users/${p.id}`} style={{ textDecoration: "none" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 12px", borderRadius: 12, background: stale ? "rgba(248,113,113,0.06)" : SURFACE2, border: stale ? "1px solid rgba(248,113,113,0.25)" : "1px solid transparent" }}>
+                  <div style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(200,150,90,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ fontFamily: inter, fontSize: 12, fontWeight: 700, color: B }}>{(p.full_name ?? p.email)[0].toUpperCase()}</span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontFamily: inter, fontSize: 13, fontWeight: 600, color: TEXT }}>{p.full_name ?? "Unnamed"}</p>
+                    <p style={{ fontFamily: inter, fontSize: 11, color: alertColor, marginTop: 1 }}>{alertLabel}</p>
+                  </div>
+                  <svg viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth={2} style={{ width: 13, height: 13, flexShrink: 0 }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontFamily: inter, fontSize: 13, fontWeight: 600, color: TEXT }}>{p.full_name ?? "Unnamed"}</p>
-                  <p style={{ fontFamily: inter, fontSize: 11, color: alertColor, marginTop: 1 }}>{alertLabel}</p>
-                </div>
-                <svg viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth={2} style={{ width: 13, height: 13, flexShrink: 0 }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-            </Link>
+              </Link>
+              <Link href={`/admin/preview/${p.id}`} style={{ textDecoration: "none", display: "block", background: B, color: BG, fontFamily: inter, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", borderRadius: 10, padding: "9px 10px", textAlign: "center" }}>
+                View as client
+              </Link>
+            </div>
           );
         })}
       </div>
@@ -386,18 +391,18 @@ export default function CommandCentre({ active, earlyWarnings = [], pending, rec
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {quietClients.map(({ p, d }) => (
-              <Link key={p.id} href={`/admin/users/${p.id}`} style={{ textDecoration: "none" }}>
-                <div style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 14, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#F87171", flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontFamily: inter, fontSize: 14, fontWeight: 600, color: TEXT }}>{p.full_name ?? p.email}</p>
-                    <p style={{ fontFamily: inter, fontSize: 12, color: "#F87171", marginTop: 2 }}>
-                      {d === null ? "Hasn't checked in yet — reach out" : `Quiet for ${d} days — worth a nudge`}
-                    </p>
-                  </div>
-                  <span style={{ fontFamily: inter, fontSize: 11, color: B, fontWeight: 600, flexShrink: 0 }}>Open →</span>
-                </div>
-              </Link>
+              <div key={p.id} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 14, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#F87171", flexShrink: 0 }} />
+                <Link href={`/admin/users/${p.id}`} style={{ textDecoration: "none", flex: 1, minWidth: 0 }}>
+                  <p style={{ fontFamily: inter, fontSize: 14, fontWeight: 600, color: TEXT }}>{p.full_name ?? p.email}</p>
+                  <p style={{ fontFamily: inter, fontSize: 12, color: "#F87171", marginTop: 2 }}>
+                    {d === null ? "Hasn't checked in yet — reach out" : `Quiet for ${d} days — worth a nudge`}
+                  </p>
+                </Link>
+                <Link href={`/admin/preview/${p.id}`} style={{ textDecoration: "none", flexShrink: 0, background: B, color: BG, fontFamily: inter, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", borderRadius: 8, padding: "9px 12px", whiteSpace: "nowrap" }}>
+                  View as client
+                </Link>
+              </div>
             ))}
             {lowReadiness.map((c, i) => (
               <Link key={`lr-${i}`} href="#" style={{ textDecoration: "none" }}>

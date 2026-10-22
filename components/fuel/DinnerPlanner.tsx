@@ -101,6 +101,7 @@ export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinT
   const [seed, setSeed] = useState(0);
   const [shopping, setShopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [readOnly, setReadOnly] = useState(false);
   const today = todayDayIndex();
 
   const pool = useMemo(() => (recipes ?? []).filter((r) => r.category === "dinner" && (r.protein_g ?? 0) >= MIN_PROTEIN), [recipes]);
@@ -109,6 +110,21 @@ export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinT
   const load = useCallback(async (ws: string) => {
     setNights(null); setError(null);
     try {
+      const view = await fetch(`/api/admin/view-as/plan?weekStart=${encodeURIComponent(ws)}`);
+      if (view.ok) {
+        const body = await view.json();
+        if (body.viewing) {
+          setReadOnly(true);
+          const n: Night[] = Array.from({ length: 7 }, () => ({ recipe_id: null, out: false }));
+          for (const row of body.cells ?? []) {
+            if (row.slot !== "dinner" || row.day < 0 || row.day > 6) continue;
+            n[row.day] = { recipe_id: row.recipe_id, out: row.custom_title === OUT, leftover: row.custom_title === LEFT };
+          }
+          setNights(n);
+          return;
+        }
+      }
+      setReadOnly(false);
       const sb = createClient();
       const { data: { user } } = await sb.auth.getUser();
       if (!user) return;
@@ -122,14 +138,23 @@ export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinT
   useEffect(() => { load(weekStart); }, [weekStart, load]);
 
   async function save(next: Night[], days: number[]) {
+    if (readOnly) { setError("Viewing as a client is read-only."); return; }
     setNights(next);
-    const sb = createClient();
-    const { data: { user } } = await sb.auth.getUser();
-    if (!user) return;
-    const now = new Date().toISOString();
-    const rows = days.map((d) => ({ user_id: user.id, week_start: weekStart, day: d, slot: "dinner", recipe_id: next[d].out ? null : next[d].recipe_id, custom_title: next[d].out ? OUT : next[d].leftover ? LEFT : null, updated_at: now }));
-    const { error: err } = await sb.from("meal_plans").upsert(rows, { onConflict: "user_id,week_start,day,slot" });
-    if (err) setError("Couldn't save that change.");
+    const cells = days.map((d) => ({
+      day: d,
+      slot: "dinner",
+      recipe_id: next[d].out ? null : next[d].recipe_id,
+      custom_title: next[d].out ? OUT : next[d].leftover ? LEFT : null,
+    }));
+    const res = await fetch("/api/nutrition/plan-cells", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ weekStart, cells }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Couldn't save that change.");
+    }
   }
 
   function build(fresh: boolean) {

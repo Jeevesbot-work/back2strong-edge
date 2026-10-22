@@ -43,6 +43,7 @@ export default function WeekPlanner({ recipes, loading, onOpenRecipe, proteinTar
   const [error, setError] = useState<string | null>(null);
   const [regenSeed, setRegenSeed] = useState(0);
   const [shoppingOpen, setShoppingOpen] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
 
   const byId = useMemo(() => new Map((recipes ?? []).map((r) => [r.id, r])), [recipes]);
 
@@ -50,6 +51,18 @@ export default function WeekPlanner({ recipes, loading, onOpenRecipe, proteinTar
     setPlanLoading(true);
     setError(null);
     try {
+      const view = await fetch(`/api/admin/view-as/plan?weekStart=${encodeURIComponent(ws)}`);
+      if (view.ok) {
+        const body = await view.json();
+        if (body.viewing) {
+          setReadOnly(true);
+          let next = emptyPlan();
+          for (const row of (body.cells ?? []) as PlanCell[]) next = setCell(next, row.day, row.slot, row.recipe_id, row.custom_title);
+          setPlan(next);
+          return;
+        }
+      }
+      setReadOnly(false);
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -70,16 +83,20 @@ export default function WeekPlanner({ recipes, loading, onOpenRecipe, proteinTar
   useEffect(() => { loadPlan(weekStart); }, [weekStart, loadPlan]);
 
   async function saveCells(cells: PlanCell[]) {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const now = new Date().toISOString();
-    const rows = cells.map((c) => ({ user_id: user.id, week_start: weekStart, day: c.day, slot: c.slot, recipe_id: c.recipe_id, custom_title: c.custom_title, updated_at: now }));
-    const { error: err } = await supabase.from("meal_plans").upsert(rows, { onConflict: "user_id,week_start,day,slot" });
-    if (err) setError("Couldn't save that change.");
+    if (readOnly) { setError("Viewing as a client is read-only."); return; }
+    const res = await fetch("/api/nutrition/plan-cells", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ weekStart, cells }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Couldn't save that change.");
+    }
   }
 
   function choose(d: number, slot: RecipeCategory, recipeId: string | null) {
+    if (readOnly) { setError("Viewing as a client is read-only."); return; }
     const next = setCell(plan, d, slot, recipeId);
     setPlan(next);
     setPicker(null);
@@ -88,6 +105,7 @@ export default function WeekPlanner({ recipes, loading, onOpenRecipe, proteinTar
   }
 
   async function fillWeek(regenerate = false) {
+    if (readOnly) { setError("Viewing as a client is read-only."); return; }
     if (!recipes?.length) return;
     const seed = regenerate ? regenSeed + 1 : regenSeed;
     if (regenerate) setRegenSeed(seed);
@@ -99,6 +117,7 @@ export default function WeekPlanner({ recipes, loading, onOpenRecipe, proteinTar
   }
 
   async function askEdge() {
+    if (readOnly) { setError("Viewing as a client is read-only."); return; }
     const text = instruction.trim();
     if (!text || building) return;
     setBuilding(true);

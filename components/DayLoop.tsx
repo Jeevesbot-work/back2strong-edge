@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 export type DayTask = { id: string; text: string; done: boolean; position: number };
 export type MorningReport = {
@@ -37,13 +36,14 @@ function Mic({ className = "w-6 h-6" }: { className?: string }) {
 //   Morning — the report Edge built from last night (to-dos, first move, worries + fixes, wins).
 //   Evening — "Close the day": talk it all out, Edge sorts it, switch off.
 export default function DayLoop({
-  dateLabel, todayTasks, todayReport, tonightReport, tonightTaskCount,
+  dateLabel, todayTasks, todayReport, tonightReport, tonightTaskCount, readOnly = false,
 }: {
   dateLabel: string;
   todayTasks: DayTask[];
   todayReport: MorningReport | null;
   tonightReport: MorningReport | null;
   tonightTaskCount: number;
+  readOnly?: boolean;
 }) {
   const [tasks, setTasks] = useState(todayTasks);
   const [closed, setClosed] = useState<{ report: MorningReport; count: number } | null>(
@@ -89,6 +89,7 @@ export default function DayLoop({
   }
 
   function start() {
+    if (readOnly) { setError("Viewing as a client is read-only."); return; }
     setOpen(true); setError("");
     if (canListen) listen("");
   }
@@ -99,6 +100,7 @@ export default function DayLoop({
   }
 
   async function finish() {
+    if (readOnly) { setError("Viewing as a client is read-only."); return; }
     if (!text.trim()) return;
     recRef.current?.stop();
     setThinking(true); setError("");
@@ -114,8 +116,15 @@ export default function DayLoop({
   }
 
   async function toggle(task: DayTask) {
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, done: !t.done } : t)));
-    await createClient().from("day_tasks").update({ done: !task.done }).eq("id", task.id);
+    if (readOnly) return;
+    const done = !task.done;
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, done } : t)));
+    const res = await fetch("/api/tasks/toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: task.id, done }),
+    });
+    if (!res.ok) setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, done: task.done } : t)));
   }
 
   const doneCount = tasks.filter((t) => t.done).length;

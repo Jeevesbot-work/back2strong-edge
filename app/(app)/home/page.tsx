@@ -289,12 +289,13 @@ export default async function HomePage() {
             todayReport={tonightIsToday ? null : reportFor(listToday)}
             tonightReport={reportFor(listTonight)}
             tonightTaskCount={tasksFor(listTonight).length}
+            readOnly={previewing}
           />
         </div>
 
         {/* Quick walk logger */}
         <div>
-          <WalkLogger initialMinutes={walkMinutesToday} />
+          <WalkLogger initialMinutes={walkMinutesToday} readOnly={previewing} />
         </div>
 
         {/* Today's training — full-bleed photo card */}

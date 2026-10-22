@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ALREADY_LOGGED, recentSessions, sessionIsDuplicate } from "@/lib/logs/duplicate";
+import { rejectIfViewing } from "@/lib/view-as-server";
 
 // Finish a workout. The client used to insert straight into Supabase, so a
 // second tap could write a second row before the button re-rendered.
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await rejectIfViewing();
+    if (blocked) return blocked;
+
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });

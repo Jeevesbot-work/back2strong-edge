@@ -59,14 +59,18 @@ export default function LessonPage() {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data: prog } = await supabase.from("programme_state").select("*").eq("user_id", user.id).single();
-    const cycle = prog ? Math.ceil(prog.current_day / 30) : 1;
-    await supabase.from("lesson_completions").upsert({
-      user_id: user.id, day_number: day, cycle, reflection,
-      micro_action_done: microActionDone, end_of_day_score: score,
-      completed_at: new Date().toISOString(),
+    const saved = await fetch("/api/lessons/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        day,
+        reflection,
+        micro_action_done: microActionDone,
+        end_of_day_score: score,
+      }),
     });
     setSaving(false);
+    if (!saved.ok) return;
     setStep("done");
   }
 

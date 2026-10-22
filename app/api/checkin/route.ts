@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildSystemPrompt } from "@/lib/claude/prompts";
 import { requireActiveClient } from "@/lib/ai/access";
+import { rejectIfViewing } from "@/lib/view-as-server";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 export async function POST(req: NextRequest) {
+  const blocked = await rejectIfViewing();
+  if (blocked) return blocked;
+
   const access = await requireActiveClient();
   if (!access.ok) return access.response;
   const { supabase, userId } = access;

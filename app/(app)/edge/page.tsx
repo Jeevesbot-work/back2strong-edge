@@ -22,6 +22,7 @@ export default function EdgePage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [viewing, setViewing] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -32,6 +33,20 @@ export default function EdgePage() {
   }, [messages, loading]);
 
   async function loadMessages() {
+    try {
+      const view = await fetch("/api/admin/view-as/messages");
+      if (view.ok) {
+        const body = await view.json();
+        if (body.viewing) {
+          setViewing(true);
+          setMessages(Array.isArray(body.messages) ? body.messages : []);
+          return;
+        }
+      }
+    } catch {
+      // Fall through to the signed-in client's own thread.
+    }
+    setViewing(false);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -45,6 +60,10 @@ export default function EdgePage() {
   }
 
   async function send(text?: string) {
+    if (viewing) {
+      setError("Viewing as a client is read-only.");
+      return;
+    }
     const msg = (text ?? input).trim();
     if (!msg || loading) return;
     setInput("");
@@ -184,13 +203,14 @@ export default function EdgePage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask your coach..."
+            placeholder={viewing ? "Read-only" : "Ask your coach..."}
+            disabled={viewing}
             rows={1}
             style={{ flex: 1, background: "#171B21", border: "1px solid #252A32", borderRadius: 16, padding: "12px 16px", color: "#F2F1ED", fontSize: 14, fontFamily: "Inter, sans-serif", outline: "none", resize: "none", minHeight: 46, maxHeight: 120 }}
           />
           <button
             onClick={() => send()}
-            disabled={!input.trim() || loading}
+            disabled={viewing || !input.trim() || loading}
             style={{ width: 46, height: 46, borderRadius: 14, background: input.trim() && !loading ? "#C8965A" : "#252A32", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "background 0.15s" }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} style={{ width: 18, height: 18, color: input.trim() && !loading ? "#0E1014" : "#3D434D" }}>

@@ -288,7 +288,8 @@ describe("coach message", { concurrency: false }, () => {
     const middleware = readFileSync(new URL("../../middleware.ts", import.meta.url), "utf8");
     const route = readFileSync(new URL("../../app/api/coach/message/route.ts", import.meta.url), "utf8");
     const lib = readFileSync(new URL("./message.ts", import.meta.url), "utf8");
-    assert.match(middleware, /matcher:\s*\["\/", "\/admin", "\/admin\/:path\*", "\/api\/admin\/:path\*"\]/);
+    assert.match(middleware, /matcher:\s*\["\/", "\/admin", "\/admin\/:path\*", "\/api\/:path\*"\]/);
+    assert.match(middleware, /if \(!gated\) return NextResponse.next\(\)/);
     assert.equal(middleware.includes("/api/coach"), false);
     assert.equal(route.includes("ADMIN_ACCESS_KEY"), false);
     assert.equal(route.includes("b2s_admin_session"), false);
