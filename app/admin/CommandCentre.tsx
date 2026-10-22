@@ -291,9 +291,9 @@ export default function CommandCentre({ active, earlyWarnings = [], pending, rec
           const alertLabel = d === null ? "No activity yet" : d === 0 ? "Active today" : `Quiet ${d}d`;
           const stale = d !== null && d >= 3;
           return (
-            <div key={p.id} style={{ display: "flex", alignItems: "stretch", gap: 6 }}>
-              <Link href={`/admin/users/${p.id}`} style={{ textDecoration: "none", flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 12px", borderRadius: 12, background: stale ? "rgba(248,113,113,0.06)" : SURFACE2, border: stale ? "1px solid rgba(248,113,113,0.25)" : "1px solid transparent", height: "100%" }}>
+            <div key={p.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <Link href={`/admin/users/${p.id}`} style={{ textDecoration: "none" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 12px", borderRadius: 12, background: stale ? "rgba(248,113,113,0.06)" : SURFACE2, border: stale ? "1px solid rgba(248,113,113,0.25)" : "1px solid transparent" }}>
                   <div style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(200,150,90,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <span style={{ fontFamily: inter, fontSize: 12, fontWeight: 700, color: B }}>{(p.full_name ?? p.email)[0].toUpperCase()}</span>
                   </div>
@@ -306,7 +306,7 @@ export default function CommandCentre({ active, earlyWarnings = [], pending, rec
                   </svg>
                 </div>
               </Link>
-              <Link href={`/admin/preview/${p.id}`} style={{ textDecoration: "none", flexShrink: 0, alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", background: B, color: BG, fontFamily: inter, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", borderRadius: 12, padding: "8px 10px", textAlign: "center", lineHeight: 1.25, width: 84 }}>
+              <Link href={`/admin/preview/${p.id}`} style={{ textDecoration: "none", display: "block", background: B, color: BG, fontFamily: inter, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", borderRadius: 10, padding: "9px 10px", textAlign: "center" }}>
                 View as client
               </Link>
             </div>
@@ -399,7 +399,7 @@ export default function CommandCentre({ active, earlyWarnings = [], pending, rec
                     {d === null ? "Hasn't checked in yet — reach out" : `Quiet for ${d} days — worth a nudge`}
                   </p>
                 </Link>
-                <Link href={`/admin/preview/${p.id}`} style={{ textDecoration: "none", flexShrink: 0, background: B, color: BG, fontFamily: inter, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", borderRadius: 8, padding: "8px 10px" }}>
+                <Link href={`/admin/preview/${p.id}`} style={{ textDecoration: "none", flexShrink: 0, background: B, color: BG, fontFamily: inter, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", borderRadius: 8, padding: "9px 12px", whiteSpace: "nowrap" }}>
                   View as client
                 </Link>
               </div>
