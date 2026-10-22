@@ -8,7 +8,8 @@ import CopyLoginLinkButton from "./CopyLoginLinkButton";
 import AssignProgrammeButton from "./AssignProgrammeButton";
 import SetWeekButton from "./SetWeekButton";
 import MessageClientBox from "./MessageClientBox";
-import WeightTrendChart from "./WeightTrendChart";
+import WeightTracker from "@/components/weight/WeightTracker";
+import { formatChange, formatKg, prepareWeightHistory } from "@/lib/weight/history";
 import FuelReportPanel from "./FuelReportPanel";
 import TestAccountToggle from "./TestAccountToggle";
 import { ReplyDraftList, UnansweredList, type OpenClientView, type ReplyDraftView } from "@/components/admin/ReplyDrafts";
@@ -25,6 +26,7 @@ export default async function AdminUserPage({ params }: { params: { id: string }
     { data: programme },
     { data: clientProgramme },
     { data: checkIns },
+    { data: weightRows },
     { data: messages },
     draftResult,
     { data: adminNotes },
@@ -36,6 +38,7 @@ export default async function AdminUserPage({ params }: { params: { id: string }
     admin.from("programme_state").select("*").eq("user_id", userId).single(),
     admin.from("client_programmes").select("programme->title, programme->subtitle, updated_at").eq("user_id", userId).maybeSingle(),
     admin.from("check_ins").select("*").eq("user_id", userId).order("date", { ascending: false }).limit(14),
+    admin.from("check_ins").select("date, weight_kg").eq("user_id", userId).not("weight_kg", "is", null).order("date", { ascending: true }),
     admin.from("messages").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(200),
     admin.from("coach_reply_drafts").select("id, user_id, content, created_at, client_message_id").eq("user_id", userId).eq("status", "pending").order("created_at", { ascending: false }).limit(20),
     admin.from("admin_notes").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
@@ -48,14 +51,11 @@ export default async function AdminUserPage({ params }: { params: { id: string }
     ? (checkIns.reduce((s, c) => s + c.morning_energy, 0) / checkIns.length).toFixed(1)
     : "—";
 
-  // Weight trend — oldest to newest, only rows where weight was actually logged.
-  const weightPoints = (checkIns ?? [])
-    .filter((c) => c.weight_kg != null)
-    .map((c) => ({ date: c.date as string, weight: Number(c.weight_kg) }))
-    .reverse();
-  const latestWeight = weightPoints.at(-1)?.weight ?? profile?.body_weight_kg ?? null;
-  const earliestWeight = weightPoints[0]?.weight ?? null;
-  const weightDelta = latestWeight != null && earliestWeight != null ? +(latestWeight - earliestWeight).toFixed(1) : null;
+  // Full weigh-in history, not the last 14 check-ins. Morning weight is check_ins.weight_kg.
+  const today = new Date().toISOString().slice(0, 10);
+  const weightHistory = prepareWeightHistory(weightRows ?? [], today);
+  const latestWeight = weightHistory.summary?.currentKg ?? profile?.body_weight_kg ?? null;
+  const weightDelta = weightHistory.entries.length >= 2 ? weightHistory.summary?.totalChangeKg ?? null : null;
 
   // Unified activity timeline — check-ins, training sessions, meals, walks.
   type ActEvent = { kind: "checkin" | "training" | "meal" | "walk"; time: string; label: string; detail: string };
@@ -170,8 +170,8 @@ export default async function AdminUserPage({ params }: { params: { id: string }
             { label: "Days/week", value: profile?.days_per_week ?? 3 },
             { label: "Programme day", value: programme?.current_day ?? 1 },
             { label: "Avg energy", value: `${avgEnergy}/5` },
-            { label: "Weight", value: latestWeight != null ? `${latestWeight}kg` : "—" },
-            { label: "Weight change", value: weightDelta != null ? `${weightDelta > 0 ? "+" : ""}${weightDelta}kg` : "—" },
+            { label: "Weight", value: latestWeight != null ? `${formatKg(Number(latestWeight))}kg` : "—" },
+            { label: "Weight change", value: weightDelta != null ? `${formatChange(weightDelta)}kg` : "—" },
           ].map(({ label, value }) => (
             <div key={label}>
               <p className="text-edge-muted text-xs uppercase tracking-widest font-condensed">{label}</p>
@@ -286,12 +286,11 @@ export default async function AdminUserPage({ params }: { params: { id: string }
         <FuelReportPanel userId={userId} />
       </div>
 
-      {/* Weight trend — visual, at a glance */}
       <div className="mb-4">
         <h2 className="font-condensed font-bold text-xs uppercase tracking-widest text-edge-muted mb-3">
-          Weight Trend
+          Weight
         </h2>
-        <WeightTrendChart points={weightPoints} />
+        <WeightTracker entries={weightHistory.entries} today={today} viewer="coach" />
       </div>
 
       {/* Unified activity — check-ins, training, meals, walks in one feed */}
