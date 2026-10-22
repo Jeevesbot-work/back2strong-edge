@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS check_ins (
   soreness INTEGER CHECK (soreness BETWEEN 1 AND 5),
   motivation INTEGER CHECK (motivation BETWEEN 1 AND 5),
   notes TEXT,
+  weight_kg DECIMAL(5,2),
   edge_response TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id, date)
@@ -197,6 +198,8 @@ CREATE TRIGGER profiles_updated_at
 -- MIGRATION: Nutrition targets (run if upgrading from earlier schema)
 -- =====================
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS body_weight_kg DECIMAL(5,2);
+-- Morning body weight is stored on the check-in (one row per day), not a separate table.
+ALTER TABLE check_ins ADD COLUMN IF NOT EXISTS weight_kg DECIMAL(5,2);
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS protein_target INTEGER DEFAULT 160;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS calorie_target INTEGER DEFAULT 2200;
 

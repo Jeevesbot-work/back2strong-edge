@@ -2,6 +2,8 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { resolveActingClient } from "@/lib/acting-client";
 import { AreaChart } from "./charts";
 import SleepTracker, { type SleepNight } from "./SleepTracker";
+import WeightTracker from "@/components/weight/WeightTracker";
+import { prepareWeightHistory } from "@/lib/weight/history";
 
 const B = "#C8A86E";
 const BG = "#0E1014";
@@ -30,6 +32,7 @@ export default async function ProgressPage() {
   const [
     { data: programme },
     { data: checkIns },
+    { data: weightRows },
     { data: sessions },
     { data: lessonCompletions },
     { data: sleepLogs },
@@ -38,6 +41,7 @@ export default async function ProgressPage() {
   ] = await Promise.all([
     db.from("programme_state").select("*").eq("user_id", targetId).single(),
     db.from("check_ins").select("*").eq("user_id", targetId).gte("created_at", ninetyDaysAgo).order("date", { ascending: true }),
+    db.from("check_ins").select("date, weight_kg").eq("user_id", targetId).not("weight_kg", "is", null).order("date", { ascending: true }),
     db.from("training_sessions").select("*").eq("user_id", targetId).not("completed_at", "is", null).order("completed_at", { ascending: false }),
     db.from("lesson_completions").select("*").eq("user_id", targetId),
     db.from("sleep_logs").select("*").eq("user_id", targetId).order("date", { ascending: true }).limit(30),
@@ -89,11 +93,9 @@ export default async function ProgressPage() {
     return streak;
   })();
 
-  // Weight series (logged at daily check-in).
-  const weightSeries = (checkIns ?? []).filter((c) => c.weight_kg != null).map((c) => ({ date: c.date, kg: Number(c.weight_kg) }));
-  const latestWeight = weightSeries.length ? weightSeries[weightSeries.length - 1].kg : null;
-  const firstWeight = weightSeries.length ? weightSeries[0].kg : null;
-  const weightDelta = latestWeight != null && firstWeight != null ? +(latestWeight - firstWeight).toFixed(1) : null;
+  // Morning weigh-ins live on check-ins. Loaded without the 90-day window so All time is the full history.
+  const today = new Date().toISOString().slice(0, 10);
+  const { entries: weighIns } = prepareWeightHistory(weightRows ?? [], today);
 
   // Energy series (1–5), last 21 days.
   const energyPoints = (checkIns ?? []).map((c) => c.morning_energy ?? 0).slice(-21);
@@ -183,34 +185,7 @@ export default async function ProgressPage() {
         ))}
       </div>
 
-      {/* Weight trend — area chart */}
-      {latestWeight != null && (
-        <div style={cardStyle}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
-            <p style={label}>Weight</p>
-            {weightDelta != null && weightSeries.length > 1 && (
-              <span style={{ fontFamily: inter, fontSize: 11, fontWeight: 600, color: weightDelta < 0 ? GREEN : weightDelta > 0 ? AMBER : MUTED }}>
-                {weightDelta > 0 ? "+" : ""}{weightDelta} kg since start
-              </span>
-            )}
-          </div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 12 }}>
-            <span style={{ fontFamily: fraunces, fontSize: 40, color: TEXT, fontWeight: 400, lineHeight: 1 }}>{latestWeight}</span>
-            <span style={{ fontFamily: inter, fontSize: 13, color: MUTED }}>kg</span>
-          </div>
-          {weightSeries.length > 1 ? (
-            <>
-              <AreaChart id="weight" data={weightSeries.map((w) => w.kg)} color={B} height={90} />
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                <span style={{ fontFamily: inter, fontSize: 10, color: MUTED }}>{new Date(weightSeries[0].date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-                <span style={{ fontFamily: inter, fontSize: 10, color: MUTED }}>Today</span>
-              </div>
-            </>
-          ) : (
-            <p style={{ fontFamily: inter, fontSize: 12, color: MUTED }}>Log your weight at check-in to see the trend build.</p>
-          )}
-        </div>
-      )}
+      <WeightTracker entries={weighIns} today={today} viewer="client" />
 
       {/* Energy trend — area chart */}
       {energyPoints.length > 1 && (
