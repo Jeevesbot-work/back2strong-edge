@@ -23,8 +23,8 @@ const SPLIT = [
   { key: "Shake / snack", share: 0.15 },
 ];
 const DINNER_SHARE = 0.35;
-/** Servings of a recipe needed to hit the dinner protein target, in half-portion steps (1–3). */
-const portionFor = (r: LiveRecipe, dinnerP: number) => Math.min(3, Math.max(1, Math.round((dinnerP / Math.max(1, r.protein_g ?? 1)) * 2) / 2));
+/** The client eats one portion and makes up the remaining protein at other meals. */
+const portionFor = () => 1;
 const density = (r: LiveRecipe) => (r.protein_g ?? 0) / Math.max(1, r.calories ?? 1);
 
 type Night = { recipe_id: string | null; out: boolean; leftover?: boolean };
@@ -36,6 +36,8 @@ interface Props {
   onOpenRecipe: (r: LiveRecipe) => void;
   proteinTarget: number;
   calorieTarget: number;
+  /** Build this week from the recipes passed in. Does not read or save a client's plan. */
+  seeded?: boolean;
 }
 
 const isFish = (r: LiveRecipe) => (r.tags ?? []).some((t) => /fish|seafood|salmon|prawn|mackerel|tuna|cod/i.test(t)) || /salmon|prawn|mackerel|tuna|cod|fish/i.test(r.title);
@@ -92,12 +94,16 @@ function fmtWeek(weekStart: string): string {
   return `${f(d)} – ${f(end)}`;
 }
 
-export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinTarget, calorieTarget }: Props) {
+export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinTarget, calorieTarget, seeded = false }: Props) {
   const dinnerP = Math.round(proteinTarget * DINNER_SHARE);
   const dinnerK = Math.round(calorieTarget * DINNER_SHARE);
   const thisWeek = useMemo(() => weekStartOf(), []);
   const [weekStart, setWeekStart] = useState(thisWeek);
-  const [nights, setNights] = useState<Night[] | null>(null);
+  const [nights, setNights] = useState<Night[] | null>(() => (
+    seeded
+      ? buildWeek((recipes ?? []).filter((r) => r.category === "dinner" && (r.protein_g ?? 0) >= MIN_PROTEIN), 0)
+      : null
+  ));
   const [seed, setSeed] = useState(0);
   const [shopping, setShopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,10 +125,11 @@ export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinT
       setNights(n);
     } catch { setError("Couldn't load your week. Try again in a moment."); setNights(Array.from({ length: 7 }, () => ({ recipe_id: null, out: false }))); }
   }, []);
-  useEffect(() => { load(weekStart); }, [weekStart, load]);
+  useEffect(() => { if (!seeded) load(weekStart); }, [weekStart, load, seeded]);
 
   async function save(next: Night[], days: number[]) {
     setNights(next);
+    if (seeded) return;
     const sb = createClient();
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return;
@@ -161,14 +168,14 @@ export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinT
 
   const planned = (nights ?? []).map((n) => (!n.out && n.recipe_id ? byId.get(n.recipe_id) : undefined));
   const cooking = planned.filter(Boolean) as LiveRecipe[];
-  const avgP = cooking.length ? Math.round(cooking.reduce((s, r) => s + (r.protein_g ?? 0) * portionFor(r, dinnerP), 0) / cooking.length) : 0;
-  const avgK = cooking.length ? Math.round(cooking.reduce((s, r) => s + (r.calories ?? 0) * portionFor(r, dinnerP), 0) / cooking.length) : 0;
+  const avgP = cooking.length ? Math.round(cooking.reduce((s, r) => s + (r.protein_g ?? 0) * portionFor(), 0) / cooking.length) : 0;
+  const avgK = cooking.length ? Math.round(cooking.reduce((s, r) => s + (r.calories ?? 0) * portionFor(), 0) / cooking.length) : 0;
   const rest = Math.max(0, proteinTarget - avgP);
   const cookNights = (nights ?? []).map((n, i) => (!n.out && !n.leftover && n.recipe_id ? byId.get(n.recipe_id) : undefined)).filter(Boolean) as LiveRecipe[];
   const pantrySet = new Set<string>();
   const batchesFor = (r: LiveRecipe) => {
     const nightsEaten = (nights ?? []).filter((n) => !n.out && n.recipe_id === r.id).length || 1;
-    return Math.max(1, Math.ceil((portionFor(r, dinnerP) * nightsEaten) / Math.max(1, r.servings ?? 1)));
+    return Math.max(1, Math.ceil((portionFor() * nightsEaten) / Math.max(1, r.servings ?? 1)));
   };
   const sources: ShoppingListSource[] = cookNights.flatMap((r) => Array.from({ length: batchesFor(r) }, () => r)).map((r) => ({
     recipeTitle: r.title,
@@ -264,9 +271,9 @@ export default function DinnerPlanner({ recipes, loading, onOpenRecipe, proteinT
                     </button>
                     {r && !n.out && (
                       <p style={{ fontSize: 12, color: C.bronzeHi, marginTop: 4 }}>
-                        {Math.round((r.protein_g ?? 0) * portionFor(r, dinnerP))}g protein <span style={{ color: C.sub }}>· {Math.round((r.calories ?? 0) * portionFor(r, dinnerP))} kcal{mins(r) && !n.leftover ? ` · ${mins(r)} min` : ""}</span>
+                        {Math.round((r.protein_g ?? 0) * portionFor())}g protein <span style={{ color: C.sub }}>· {Math.round((r.calories ?? 0) * portionFor())} kcal{mins(r) && !n.leftover ? ` · ${mins(r)} min` : ""}</span>
                         <span style={{ display: "block", color: C.sub, fontSize: 11, marginTop: 2 }}>
-                          Your portion: {portionFor(r, dinnerP) === 1 ? "1 serving" : `${portionFor(r, dinnerP)} servings`}
+                          Your portion: {portionFor() === 1 ? "1 serving" : `${portionFor()} servings`}
                           {!n.leftover && batchesFor(r) > 1 ? ` · make it ×${batchesFor(r)}` : ""}
                         </span>
                       </p>
