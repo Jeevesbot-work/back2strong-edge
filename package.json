@@ -15,7 +15,8 @@
     "test:nutrition": "tsx --test lib/nutrition/photo-frame.test.ts",
     "test:week": "tsx --test lib/training/week.test.ts",
     "test:logs": "tsx --test lib/logs/duplicate.test.ts",
-    "test:clients": "tsx --test lib/clients/onboarding.test.ts"
+    "test:clients": "tsx --test lib/clients/onboarding.test.ts",
+    "test:cardio": "tsx --test lib/data/cardio.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",

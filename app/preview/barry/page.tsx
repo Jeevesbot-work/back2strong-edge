@@ -178,9 +178,10 @@ function TrainScreen({ prog, currentWeek, weekInfo }: { prog: typeof BARRY_PROGR
         })}
       </div>
 
-      {/* Cardio cards */}
+      {/* Cardio cards — skipped when a block is absent so a partial programme cannot crash the preview */}
       <p style={{ fontFamily: inter, fontSize: 9, color: MUTED, textTransform: "uppercase", letterSpacing: "0.2em", marginBottom: 12 }}>Cardio</p>
 
+      {prog.cardio?.inclineWalk && (
       <div style={{ background: SURFACE, borderRadius: 20, border: `1px solid ${BORDER}`, padding: "18px 20px", marginBottom: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <span style={{ fontSize: 20 }}>🚶</span>
@@ -191,7 +192,7 @@ function TrainScreen({ prog, currentWeek, weekInfo }: { prog: typeof BARRY_PROGR
         </div>
         <p style={{ fontFamily: inter, fontSize: 12, color: "rgba(242,241,237,0.6)", marginBottom: 10, lineHeight: 1.5 }}>{prog.cardio.inclineWalk.setup}</p>
         <div style={{ display: "flex", gap: 8 }}>
-          {prog.cardio.inclineWalk.byWeek.map(({ week, duration }) => (
+          {(prog.cardio.inclineWalk.byWeek ?? []).map(({ week, duration }) => (
             <div key={week} style={{
               flex: 1, textAlign: "center", padding: "8px 4px",
               background: week === currentWeek ? "rgba(200,150,90,0.1)" : BORDER,
@@ -204,7 +205,9 @@ function TrainScreen({ prog, currentWeek, weekInfo }: { prog: typeof BARRY_PROGR
           ))}
         </div>
       </div>
+      )}
 
+      {prog.cardio?.assaultBike && (
       <div style={{ background: SURFACE, borderRadius: 20, border: `1px solid ${BORDER}`, padding: "18px 20px", marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <span style={{ fontSize: 20 }}>🌙</span>
@@ -217,6 +220,7 @@ function TrainScreen({ prog, currentWeek, weekInfo }: { prog: typeof BARRY_PROGR
           <p style={{ fontFamily: inter, fontSize: 11, color: "rgba(200,150,90,0.8)" }}>{prog.cardio.assaultBike.rule}</p>
         </div>
       </div>
+      )}
 
       {/* Nutrition */}
       <p style={{ fontFamily: inter, fontSize: 9, color: MUTED, textTransform: "uppercase", letterSpacing: "0.2em", marginBottom: 12 }}>Nutrition</p>

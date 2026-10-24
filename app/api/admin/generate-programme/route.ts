@@ -36,8 +36,7 @@ const SCHEMA = `
     ],
     "progressionRule": "Hit the top of the rep range on all sets at RPE 7 or easier? Add a small load next session. Felt genuinely hard at the same weight? Stay there. Earn the jump.",
     "cardio": {
-      "inclineWalk": { "label": "Light Walk", "days": "e.g. Saturday — optional", "setup": "one line", "byWeek": [ { "week": 1, "duration": "20 min" }, { "week": 2, "duration": "20–30 min" } ], "timingTip": "optional one line" },
-      "assaultBike": { "label": "N/A — this block", "days": "Not programmed this block", "byWeek": [] }
+      "inclineWalk": { "label": "Light Walk", "days": "e.g. Saturday — optional", "setup": "one line", "byWeek": [ { "week": 1, "duration": "20 min" }, { "week": 2, "duration": "20–30 min" } ], "timingTip": "optional one line" }
     },
     "nutrition": {
       "headline": "1-2 sentences. Protein-first. Tie to their goal and life.",
@@ -83,6 +82,7 @@ Hard rules:
 - Output ONLY valid JSON matching the schema. No markdown, no code fences, no commentary before or after.
 - sessions keys MUST exactly match every weeklySchedule entry where type is "lift" (its sessionKey). Every lift day needs a matching session object.
 - progression array length MUST equal lengthWeeks.
+- Cardio keys: use "inclineWalk" for walks and "assaultBike" for bike work. Omit a key that is not programmed — do not set it to null and do not invent a placeholder block. Each included block needs a label, days, and a byWeek array. Another string key is allowed only when that block has a label.
 - Do NOT invent YouTube links. Omit the "yt" field entirely on every exercise.
 - If a medical condition is given, add it to considerations, set medicalLabel/medicalNote, and never override clinical advice. If none, set medicalLabel and medicalNote to empty strings.
 - Numbers (sets, kcal, p, time, proteinTarget, calorieTarget) are real numbers, not strings, where the schema shows numbers.`;
