@@ -176,6 +176,13 @@ export interface ProgrammeCardioBlock {
   byWeek: { week: number; duration?: string; format?: string }[];
 }
 
+// Walks use `inclineWalk`. Bike work uses `assaultBike`. Either key may be
+// absent (The Plan dry-run writes walks only). Any other string key is allowed.
+export type ProgrammeCardio = {
+  inclineWalk?: ProgrammeCardioBlock;
+  assaultBike?: ProgrammeCardioBlock;
+} & Record<string, ProgrammeCardioBlock | undefined>;
+
 export interface Programme {
   id: string;
   title: string;
@@ -188,7 +195,7 @@ export interface Programme {
   weeklySchedule: ProgrammeScheduleDay[];
   progression: ProgrammeWeek[];
   progressionRule: string;
-  cardio: { inclineWalk: ProgrammeCardioBlock; assaultBike: ProgrammeCardioBlock };
+  cardio?: ProgrammeCardio;
   nutrition: {
     headline: string;
     targets: string[];

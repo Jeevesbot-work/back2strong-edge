@@ -1,6 +1,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { resolveActingClient } from "@/lib/acting-client";
 import { getClientProgramme, getProgrammeWeek, blockSessionKeys } from "@/lib/data/programme-loader";
+import { resolveCardioBlocks, type ResolvedCardioBlock } from "@/lib/data/cardio";
 import SessionCards from "@/components/SessionCards";
 import AwaitingProgramme from "@/components/AwaitingProgramme";
 import Link from "next/link";
@@ -190,79 +191,7 @@ export default async function TrainPage() {
         <p style={{ fontSize: 9, color: "#9BA3AF", textTransform: "uppercase", letterSpacing: "0.2em", fontFamily: "Inter, sans-serif", marginBottom: 12 }}>
           Cardio
         </p>
-
-        {/* Incline walk */}
-        <div style={{ background: "#171B21", borderRadius: 20, border: "1px solid #252A32", padding: "18px 20px", marginBottom: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-            <span style={{ fontSize: 20 }}>🚶</span>
-            <div>
-              <p style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 17, color: "#F2F1ED", fontWeight: 400 }}>
-                {prog.cardio.inclineWalk.label}
-              </p>
-              <p style={{ fontSize: 11, color: "#9BA3AF", fontFamily: "Inter, sans-serif", marginTop: 2 }}>
-                {prog.cardio.inclineWalk.days}
-              </p>
-            </div>
-          </div>
-          <p style={{ fontSize: 12, color: "rgba(242,241,237,0.6)", fontFamily: "Inter, sans-serif", marginBottom: 10, lineHeight: 1.5 }}>
-            {prog.cardio.inclineWalk.setup}
-          </p>
-          <div style={{ display: "flex", gap: 8, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
-            {prog.cardio.inclineWalk.byWeek.map(({ week, duration }) => (
-              <div key={week} style={{
-                flex: "1 0 48px", textAlign: "center", padding: "8px 4px",
-                background: week === currentWeek ? "rgba(200,150,90,0.1)" : "#252A32",
-                border: `1px solid ${week === currentWeek ? "rgba(200,150,90,0.3)" : "transparent"}`,
-                borderRadius: 10,
-              }}>
-                <p style={{ fontSize: 8, color: "#9BA3AF", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "Inter, sans-serif", marginBottom: 2 }}>Wk {week}</p>
-                <p style={{ fontSize: 11, color: week === currentWeek ? "#C8965A" : "#9BA3AF", fontFamily: "Inter, sans-serif", fontWeight: week === currentWeek ? 600 : 400 }}>{duration}</p>
-              </div>
-            ))}
-          </div>
-          <div style={{ background: "rgba(200,150,90,0.06)", borderRadius: 12, padding: "10px 14px", border: "1px solid rgba(200,150,90,0.12)" }}>
-            <p style={{ fontSize: 11, color: "rgba(242,241,237,0.6)", fontFamily: "Inter, sans-serif", lineHeight: 1.5 }}>
-              {prog.cardio.inclineWalk.timingTip}
-            </p>
-          </div>
-        </div>
-
-        {/* Assault bike */}
-        <div style={{ background: "#171B21", borderRadius: 20, border: "1px solid #252A32", padding: "18px 20px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-            <span style={{ fontSize: 20 }}>🚴</span>
-            <div>
-              <p style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 17, color: "#F2F1ED", fontWeight: 400 }}>
-                {prog.cardio.assaultBike.label}
-              </p>
-              <p style={{ fontSize: 11, color: "#9BA3AF", fontFamily: "Inter, sans-serif", marginTop: 2 }}>
-                {prog.cardio.assaultBike.days}
-              </p>
-            </div>
-          </div>
-          <div style={{ background: "rgba(200,150,90,0.06)", border: "1px solid rgba(200,150,90,0.2)", borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
-            <p style={{ fontSize: 11, color: "rgba(200,150,90,0.8)", fontFamily: "Inter, sans-serif" }}>
-              {prog.cardio.assaultBike.rule}
-            </p>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {prog.cardio.assaultBike.byWeek.map(({ week, format }) => (
-              <div key={week} style={{
-                display: "flex", alignItems: "center", gap: 12, padding: "10px 12px",
-                background: week === currentWeek ? "rgba(200,150,90,0.08)" : "#252A32",
-                border: `1px solid ${week === currentWeek ? "rgba(200,150,90,0.2)" : "transparent"}`,
-                borderRadius: 10,
-              }}>
-                <span style={{ fontSize: 9, color: week === currentWeek ? "#C8965A" : "#9BA3AF", fontFamily: "Inter, sans-serif", textTransform: "uppercase", letterSpacing: "0.1em", minWidth: 38, fontWeight: 600 }}>
-                  Wk {week}
-                </span>
-                <span style={{ fontSize: 12, color: week === currentWeek ? "#F2F1ED" : "rgba(242,241,237,0.35)", fontFamily: "Inter, sans-serif" }}>
-                  {format}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <CardioSection blocks={resolveCardioBlocks(prog.cardio)} currentWeek={currentWeek} />
       </div>
 
       {/* ── Nutrition ── */}
@@ -365,6 +294,123 @@ export default async function TrainPage() {
         </div>
       )}
       </RevealGroup>
+    </div>
+  );
+}
+
+function CardioSection({ blocks, currentWeek }: { blocks: ResolvedCardioBlock[]; currentWeek: number }) {
+  if (blocks.length === 0) {
+    return (
+      <div style={{ background: "#171B21", borderRadius: 20, border: "1px solid #252A32", padding: "18px 20px" }}>
+        <p style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 17, color: "#F2F1ED", fontWeight: 400, marginBottom: 6 }}>
+          No cardio this block
+        </p>
+        <p style={{ fontSize: 12, color: "rgba(242,241,237,0.6)", fontFamily: "Inter, sans-serif", lineHeight: 1.5 }}>
+          Walks and other conditioning show up here when they are in your programme. Your lifting sessions above still stand.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {blocks.map((block, index) => (
+        <CardioCard key={`${block.key}-${index}`} block={block} currentWeek={currentWeek} />
+      ))}
+    </div>
+  );
+}
+
+function CardioCard({ block, currentWeek }: { block: ResolvedCardioBlock; currentWeek: number }) {
+  const emoji = block.kind === "walk" ? "🚶" : block.kind === "bike" ? "🚴" : "🏃";
+  const detail = block.byWeek.length > 0
+    ? block.kind === "bike"
+      ? <WeekList block={block} currentWeek={currentWeek} />
+      : <WeekChips block={block} currentWeek={currentWeek} />
+    : null;
+
+  return (
+    <div style={{ background: "#171B21", borderRadius: 20, border: "1px solid #252A32", padding: "18px 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <span style={{ fontSize: 20 }}>{emoji}</span>
+        <div>
+          <p style={{ fontFamily: "Fraunces, Georgia, serif", fontSize: 17, color: "#F2F1ED", fontWeight: 400 }}>
+            {block.label}
+          </p>
+          {block.days && (
+            <p style={{ fontSize: 11, color: "#9BA3AF", fontFamily: "Inter, sans-serif", marginTop: 2 }}>
+              {block.days}
+            </p>
+          )}
+        </div>
+      </div>
+      {block.setup && (
+        <p style={{ fontSize: 12, color: "rgba(242,241,237,0.6)", fontFamily: "Inter, sans-serif", marginBottom: detail || block.rule || block.timingTip ? 10 : 0, lineHeight: 1.5 }}>
+          {block.setup}
+        </p>
+      )}
+      {block.kind === "bike" && block.rule && (
+        <div style={{ background: "rgba(200,150,90,0.06)", border: "1px solid rgba(200,150,90,0.2)", borderRadius: 10, padding: "8px 12px", marginBottom: detail ? 12 : 0 }}>
+          <p style={{ fontSize: 11, color: "rgba(200,150,90,0.8)", fontFamily: "Inter, sans-serif" }}>
+            {block.rule}
+          </p>
+        </div>
+      )}
+      {detail}
+      {block.kind !== "bike" && block.rule && (
+        <div style={{ background: "rgba(200,150,90,0.06)", border: "1px solid rgba(200,150,90,0.2)", borderRadius: 10, padding: "8px 12px", marginTop: detail ? 12 : 0 }}>
+          <p style={{ fontSize: 11, color: "rgba(200,150,90,0.8)", fontFamily: "Inter, sans-serif" }}>
+            {block.rule}
+          </p>
+        </div>
+      )}
+      {block.timingTip && (
+        <div style={{ background: "rgba(200,150,90,0.06)", borderRadius: 12, padding: "10px 14px", border: "1px solid rgba(200,150,90,0.12)", marginTop: 12 }}>
+          <p style={{ fontSize: 11, color: "rgba(242,241,237,0.6)", fontFamily: "Inter, sans-serif", lineHeight: 1.5 }}>
+            {block.timingTip}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WeekChips({ block, currentWeek }: { block: ResolvedCardioBlock; currentWeek: number }) {
+  return (
+    <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+      {block.byWeek.map((row, index) => (
+        <div key={`${row.week}-${index}`} style={{
+          flex: "1 0 48px", textAlign: "center", padding: "8px 4px",
+          background: row.week === currentWeek ? "rgba(200,150,90,0.1)" : "#252A32",
+          border: `1px solid ${row.week === currentWeek ? "rgba(200,150,90,0.3)" : "transparent"}`,
+          borderRadius: 10,
+        }}>
+          <p style={{ fontSize: 8, color: "#9BA3AF", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "Inter, sans-serif", marginBottom: 2 }}>Wk {row.week}</p>
+          <p style={{ fontSize: 11, color: row.week === currentWeek ? "#C8965A" : "#9BA3AF", fontFamily: "Inter, sans-serif", fontWeight: row.week === currentWeek ? 600 : 400 }}>{row.duration || row.format || "—"}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WeekList({ block, currentWeek }: { block: ResolvedCardioBlock; currentWeek: number }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {block.byWeek.map((row, index) => (
+        <div key={`${row.week}-${index}`} style={{
+          display: "flex", alignItems: "center", gap: 12, padding: "10px 12px",
+          background: row.week === currentWeek ? "rgba(200,150,90,0.08)" : "#252A32",
+          border: `1px solid ${row.week === currentWeek ? "rgba(200,150,90,0.2)" : "transparent"}`,
+          borderRadius: 10,
+        }}>
+          <span style={{ fontSize: 9, color: row.week === currentWeek ? "#C8965A" : "#9BA3AF", fontFamily: "Inter, sans-serif", textTransform: "uppercase", letterSpacing: "0.1em", minWidth: 38, fontWeight: 600 }}>
+            Wk {row.week}
+          </span>
+          <span style={{ fontSize: 12, color: row.week === currentWeek ? "#F2F1ED" : "rgba(242,241,237,0.35)", fontFamily: "Inter, sans-serif" }}>
+            {row.format || row.duration || "—"}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
